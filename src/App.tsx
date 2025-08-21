@@ -123,6 +123,7 @@ const SchoolDataTab: React.FC<{
   const [ttdKepsek, setTtdKepsek] = useState("");
   const [ttdGuru, setTtdGuru] = useState("");
   const [loading, setLoading] = useState<boolean>(true);
+  const [isSaving, setIsSaving] = useState<boolean>(false); // Add isSaving state
   const [isKepsekSigning, setIsKepsekSigning] = useState(false);
   const [isGuruSigning, setIsGuruSigning] = useState(false);
   const kepsekSigCanvas = useRef<SignatureCanvas>(null);
@@ -162,6 +163,8 @@ const SchoolDataTab: React.FC<{
       return;
     }
 
+    setIsSaving(true); // Set saving state to true
+
     const data: SchoolData = {
       namaKepsek,
       nipKepsek,
@@ -183,30 +186,40 @@ const SchoolDataTab: React.FC<{
       .then(() => {
         alert("✅ Data sekolah berhasil diperbarui!");
         onRefresh();
+        setIsSaving(false); // Reset saving state on success
       })
-      .catch(() => alert("❌ Gagal memperbarui data sekolah."));
+      .catch(() => {
+        alert("❌ Gagal memperbarui data sekolah.");
+        setIsSaving(false); // Reset saving state on error
+      });
   };
 
   const handleClearKepsekSignature = () => {
     kepsekSigCanvas.current?.clear();
-    setTtdKepsek(""); // Clear the signature data
   };
 
   const handleClearGuruSignature = () => {
     guruSigCanvas.current?.clear();
-    setTtdGuru(""); // Clear the signature data
   };
 
   const handleSaveKepsekSignature = () => {
-    const signature = kepsekSigCanvas.current?.toDataURL("image/png") || "";
-    setTtdKepsek(signature);
-    setIsKepsekSigning(false);
+    const signature = kepsekSigCanvas.current?.toDataURL("image/png");
+    if (signature && !kepsekSigCanvas.current?.isEmpty()) {
+      setTtdKepsek(signature);
+      setIsKepsekSigning(false);
+    } else {
+      alert("⚠️ Tanda tangan kepala sekolah kosong!");
+    }
   };
 
   const handleSaveGuruSignature = () => {
-    const signature = guruSigCanvas.current?.toDataURL("image/png") || "";
-    setTtdGuru(signature);
-    setIsGuruSigning(false);
+    const signature = guruSigCanvas.current?.toDataURL("image/png");
+    if (signature && !guruSigCanvas.current?.isEmpty()) {
+      setTtdGuru(signature);
+      setIsGuruSigning(false);
+    } else {
+      alert("⚠️ Tanda tangan guru kosong!");
+    }
   };
 
   const handleStartKepsekSigning = () => {
@@ -244,6 +257,7 @@ const SchoolDataTab: React.FC<{
               value={namaKepsek}
               onChange={(e) => setNamaKepsek(e.target.value)}
               className="w-full border border-gray-300 px-4 py-2 rounded-lg mb-2"
+              disabled={isSaving} // Disable input during saving
             />
             <input
               type="text"
@@ -251,6 +265,7 @@ const SchoolDataTab: React.FC<{
               value={nipKepsek}
               onChange={(e) => setNipKepsek(e.target.value)}
               className="w-full border border-gray-300 px-4 py-2 rounded-lg mb-2"
+              disabled={isSaving} // Disable input during saving
             />
             <div className="mb-2">
               <p className="text-sm text-gray-500 mb-1">
@@ -262,7 +277,9 @@ const SchoolDataTab: React.FC<{
                   penColor="black"
                   canvasProps={{
                     className: `border border-gray-300 rounded-lg ${
-                      !isKepsekSigning ? "opacity-50 pointer-events-none" : ""
+                      !isKepsekSigning || isSaving
+                        ? "opacity-50 pointer-events-none"
+                        : ""
                     }`,
                     style: { width: "100%", height: "300px" },
                   }}
@@ -280,7 +297,10 @@ const SchoolDataTab: React.FC<{
                 {!isKepsekSigning && (
                   <button
                     onClick={handleStartKepsekSigning}
-                    className="px-4 py-1 bg-green-500 hover:bg-green-600 text-white rounded-lg text-sm"
+                    className={`px-4 py-1 bg-green-500 hover:bg-green-600 text-white rounded-lg text-sm ${
+                      isSaving ? "opacity-50 cursor-not-allowed" : ""
+                    }`}
+                    disabled={isSaving} // Disable button during saving
                   >
                     ✍️ Mulai Tanda Tangan
                   </button>
@@ -288,15 +308,22 @@ const SchoolDataTab: React.FC<{
                 {isKepsekSigning && (
                   <button
                     onClick={handleSaveKepsekSignature}
-                    className="px-4 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-sm"
+                    className={`px-4 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-sm ${
+                      isSaving ? "opacity-50 cursor-not-allowed" : ""
+                    }`}
+                    disabled={isSaving} // Disable button during saving
                   >
                     💾 Simpan Tanda Tangan
                   </button>
                 )}
                 <button
                   onClick={handleClearKepsekSignature}
-                  className="px-4 py-1 bg-red-500 hover:bg-red-600 text-white rounded-lg text-sm"
-                  disabled={!isKepsekSigning}
+                  className={`px-4 py-1 bg-red-500 hover:bg-red-600 text-white rounded-lg text-sm ${
+                    !isKepsekSigning || isSaving
+                      ? "opacity-50 cursor-not-allowed"
+                      : ""
+                  }`}
+                  disabled={!isKepsekSigning || isSaving} // Disable during saving
                 >
                   🗑️ Hapus TTD
                 </button>
@@ -318,6 +345,7 @@ const SchoolDataTab: React.FC<{
               value={namaGuru}
               onChange={(e) => setNamaGuru(e.target.value)}
               className="w-full border border-gray-300 px-4 py-2 rounded-lg mb-2"
+              disabled={isSaving} // Disable input during saving
             />
             <input
               type="text"
@@ -325,6 +353,7 @@ const SchoolDataTab: React.FC<{
               value={nipGuru}
               onChange={(e) => setNipGuru(e.target.value)}
               className="w-full border border-gray-300 px-4 py-2 rounded-lg mb-2"
+              disabled={isSaving} // Disable input during saving
             />
             <div className="mb-2">
               <p className="text-sm text-gray-500 mb-1">Tanda Tangan Guru</p>
@@ -334,7 +363,9 @@ const SchoolDataTab: React.FC<{
                   penColor="black"
                   canvasProps={{
                     className: `border border-gray-300 rounded-lg ${
-                      !isGuruSigning ? "opacity-50 pointer-events-none" : ""
+                      !isGuruSigning || isSaving
+                        ? "opacity-50 pointer-events-none"
+                        : ""
                     }`,
                     style: { width: "100%", height: "300px" },
                   }}
@@ -352,7 +383,10 @@ const SchoolDataTab: React.FC<{
                 {!isGuruSigning && (
                   <button
                     onClick={handleStartGuruSigning}
-                    className="px-4 py-1 bg-green-500 hover:bg-green-600 text-white rounded-lg text-sm"
+                    className={`px-4 py-1 bg-green-500 hover:bg-green-600 text-white rounded-lg text-sm ${
+                      isSaving ? "opacity-50 cursor-not-allowed" : ""
+                    }`}
+                    disabled={isSaving} // Disable button during saving
                   >
                     ✍️ Mulai Tanda Tangan
                   </button>
@@ -360,15 +394,22 @@ const SchoolDataTab: React.FC<{
                 {isGuruSigning && (
                   <button
                     onClick={handleSaveGuruSignature}
-                    className="px-4 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-sm"
+                    className={`px-4 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-sm ${
+                      isSaving ? "opacity-50 cursor-not-allowed" : ""
+                    }`}
+                    disabled={isSaving} // Disable button during saving
                   >
                     💾 Simpan Tanda Tangan
                   </button>
                 )}
                 <button
                   onClick={handleClearGuruSignature}
-                  className="px-4 py-1 bg-red-500 hover:bg-red-600 text-white rounded-lg text-sm"
-                  disabled={!isGuruSigning}
+                  className={`px-4 py-1 bg-red-500 hover:bg-red-600 text-white rounded-lg text-sm ${
+                    !isGuruSigning || isSaving
+                      ? "opacity-50 cursor-not-allowed"
+                      : ""
+                  }`}
+                  disabled={!isGuruSigning || isSaving} // Disable during saving
                 >
                   🗑️ Hapus TTD
                 </button>
@@ -386,9 +427,14 @@ const SchoolDataTab: React.FC<{
         <div className="text-center">
           <button
             onClick={handleSave}
-            className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium"
+            disabled={isSaving} // Disable button during saving
+            className={`px-6 py-2 rounded-lg font-medium transition-colors ${
+              isSaving
+                ? "bg-blue-400 cursor-not-allowed"
+                : "bg-blue-600 hover:bg-blue-700"
+            } text-white`}
           >
-            💾 Simpan Data Sekolah
+            {isSaving ? "⏳ Menyimpan..." : "💾 Simpan Data Sekolah"}
           </button>
         </div>
       </div>
@@ -413,40 +459,42 @@ const StudentDataTab: React.FC<{
   const [bulkNama, setBulkNama] = useState("");
   const [bulkKelas, setBulkKelas] = useState("");
 
+  // State untuk loading
+  const [isSaving, setIsSaving] = useState(false);
+  const [isBulkSaving, setIsBulkSaving] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
   const handleSubmit = () => {
     if (!nisn || !nama || !kelas) {
       alert("⚠️ Semua field wajib diisi!");
       return;
     }
 
-    // Pastikan semua data dikirim sebagai string/text
-    const studentData = {
-      type: "siswa",
-      sheet: "DataSiswa", // Spesifikasi sheet target
-      nisn: nisn.toString().trim(), // Konversi ke string dan trim whitespace
-      nama: nama.toString().trim(),
-      kelas: kelas.toString().trim(),
-    };
+    setIsSaving(true);
 
     fetch(endpoint, {
       method: "POST",
       mode: "no-cors",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
-      body: JSON.stringify(studentData),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: "siswa",
+        nisn,
+        nama,
+        kelas,
+      }),
     })
       .then(() => {
-        alert("✅ Siswa berhasil ditambahkan ke sheet DataSiswa!");
+        alert("✅ Siswa berhasil ditambahkan!");
         setNisn("");
         setNama("");
         setKelas("");
         onRefresh();
+        setIsSaving(false);
       })
-      .catch((error) => {
-        console.error("Error adding student:", error);
+      .catch(() => {
         alert("❌ Gagal menambahkan siswa.");
+        setIsSaving(false);
       });
   };
 
@@ -490,6 +538,8 @@ const StudentDataTab: React.FC<{
       return;
     }
 
+    setIsBulkSaving(true);
+
     // Prepare data untuk bulk import
     const students = nisnLines.map((nisn, index) => ({
       nisn: nisn.trim(),
@@ -520,12 +570,14 @@ const StudentDataTab: React.FC<{
         setBulkKelas("");
         setShowBulkImport(false);
         onRefresh();
+        setIsBulkSaving(false);
       })
       .catch((error) => {
         console.error("Error:", error);
         alert(
           "❌ Terjadi kesalahan saat import data massal. Pastikan:\n1. URL endpoint sudah benar\n2. Google Apps Script sudah di-deploy\n3. Koneksi internet stabil"
         );
+        setIsBulkSaving(false);
       });
   };
 
@@ -535,32 +587,28 @@ const StudentDataTab: React.FC<{
     const newClass = prompt("Edit kelas siswa:", student.kelas ?? undefined);
 
     if (newNisn && newName && newClass) {
-      // Pastikan data edit juga dalam format text
-      const editData = {
-        type: "edit",
-        sheet: "DataSiswa",
-        nisnLama: student.nisn ? student.nisn.toString().trim() : "",
-        nisnBaru: newNisn.toString().trim(),
-        nama: newName.toString().trim(),
-        kelas: newClass.toString().trim(),
-      };
+      setIsEditing(true);
 
       fetch(endpoint, {
         method: "POST",
         mode: "no-cors",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
-        body: JSON.stringify(editData),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "edit",
+          nisnLama: student.nisn,
+          nisnBaru: newNisn,
+          nama: newName,
+          kelas: newClass,
+        }),
       })
         .then(() => {
-          alert("✅ Data siswa berhasil diperbarui di sheet DataSiswa");
+          alert("✅ Data siswa berhasil diperbarui");
           onRefresh();
+          setIsEditing(false);
         })
-        .catch((error) => {
-          console.error("Error editing student:", error);
+        .catch(() => {
           alert("❌ Gagal memperbarui data");
+          setIsEditing(false);
         });
     }
   };
@@ -570,31 +618,26 @@ const StudentDataTab: React.FC<{
       alert("❌ NISN tidak valid untuk penghapusan.");
       return;
     }
-
     if (confirm("Yakin ingin menghapus siswa ini?")) {
-      // Pastikan NISN dikirim sebagai string
-      const deleteData = {
-        type: "delete",
-        sheet: "DataSiswa",
-        nisn: nisn.toString().trim(),
-      };
+      setIsDeleting(true);
 
       fetch(endpoint, {
         method: "POST",
         mode: "no-cors",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
-        body: JSON.stringify(deleteData),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "delete",
+          nisn: nisn,
+        }),
       })
         .then(() => {
-          alert("🗑️ Data siswa berhasil dihapus dari sheet DataSiswa");
+          alert("🗑️ Data siswa berhasil dihapus");
           onRefresh();
+          setIsDeleting(false);
         })
-        .catch((error) => {
-          console.error("Error deleting student:", error);
+        .catch(() => {
           alert("❌ Gagal menghapus siswa");
+          setIsDeleting(false);
         });
     }
   };
@@ -628,6 +671,7 @@ const StudentDataTab: React.FC<{
             value={nisn}
             onChange={(e) => setNisn(e.target.value)}
             className="w-full border border-gray-300 px-4 py-2 rounded-lg"
+            disabled={isSaving}
           />
           <input
             type="text"
@@ -635,6 +679,7 @@ const StudentDataTab: React.FC<{
             value={nama}
             onChange={(e) => setNama(e.target.value)}
             className="w-full border border-gray-300 px-4 py-2 rounded-lg"
+            disabled={isSaving}
           />
           <input
             type="text"
@@ -642,18 +687,29 @@ const StudentDataTab: React.FC<{
             value={kelas}
             onChange={(e) => setKelas(e.target.value)}
             className="w-full border border-gray-300 px-4 py-2 rounded-lg"
+            disabled={isSaving}
           />
         </div>
         <div className="flex justify-center gap-4">
           <button
             onClick={handleSubmit}
-            className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium"
+            disabled={isSaving}
+            className={`px-6 py-2 rounded-lg font-medium transition-colors ${
+              isSaving
+                ? "bg-blue-400 cursor-not-allowed"
+                : "bg-blue-600 hover:bg-blue-700"
+            } text-white`}
           >
-            ➕ Tambah Siswa
+            {isSaving ? "⏳ Menyimpan..." : "➕ Tambah Siswa"}
           </button>
           <button
             onClick={() => setShowBulkImport(!showBulkImport)}
-            className="px-6 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium"
+            disabled={isSaving}
+            className={`px-6 py-2 rounded-lg font-medium transition-colors ${
+              isSaving
+                ? "bg-green-400 cursor-not-allowed"
+                : "bg-green-600 hover:bg-green-700"
+            } text-white`}
           >
             📋 Tambah Data Massal
           </button>
@@ -664,7 +720,7 @@ const StudentDataTab: React.FC<{
       {showBulkImport && (
         <div className="bg-white p-6 rounded-lg shadow-md mb-6 border-2 border-green-200">
           <h2 className="text-xl font-bold mb-4 text-center text-green-600">
-            Import Data Massal ke Sheet DataSiswa
+            Import Data Massal
           </h2>
           <div className="mb-4 p-4 bg-green-50 rounded-lg">
             <p className="text-sm text-green-700 mb-2">
@@ -679,8 +735,6 @@ const StudentDataTab: React.FC<{
               3. Pastikan jumlah baris di setiap kolom sama
               <br />
               4. Klik "Kirim Data Massal"
-              <br />
-              5. Data akan disimpan sebagai text di sheet DataSiswa
             </p>
           </div>
 
@@ -695,6 +749,7 @@ const StudentDataTab: React.FC<{
                 onChange={(e) => setBulkNisn(e.target.value)}
                 className="w-full border border-gray-300 px-4 py-2 rounded-lg h-32 resize-none"
                 rows={6}
+                disabled={isBulkSaving}
               />
             </div>
             <div>
@@ -707,6 +762,7 @@ const StudentDataTab: React.FC<{
                 onChange={(e) => setBulkNama(e.target.value)}
                 className="w-full border border-gray-300 px-4 py-2 rounded-lg h-32 resize-none"
                 rows={6}
+                disabled={isBulkSaving}
               />
             </div>
             <div>
@@ -719,6 +775,7 @@ const StudentDataTab: React.FC<{
                 onChange={(e) => setBulkKelas(e.target.value)}
                 className="w-full border border-gray-300 px-4 py-2 rounded-lg h-32 resize-none"
                 rows={6}
+                disabled={isBulkSaving}
               />
             </div>
           </div>
@@ -726,9 +783,14 @@ const StudentDataTab: React.FC<{
           <div className="flex justify-center gap-4">
             <button
               onClick={handleBulkImport}
-              className="px-6 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium"
+              disabled={isBulkSaving}
+              className={`px-6 py-2 rounded-lg font-medium transition-colors ${
+                isBulkSaving
+                  ? "bg-green-400 cursor-not-allowed"
+                  : "bg-green-600 hover:bg-green-700"
+              } text-white`}
             >
-              📤 Kirim Data Massal
+              {isBulkSaving ? "⏳ Menyimpan..." : "📤 Kirim Data Massal"}
             </button>
             <button
               onClick={() => {
@@ -737,7 +799,12 @@ const StudentDataTab: React.FC<{
                 setBulkKelas("");
                 setShowBulkImport(false);
               }}
-              className="px-6 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-lg font-medium"
+              disabled={isBulkSaving}
+              className={`px-6 py-2 rounded-lg font-medium transition-colors ${
+                isBulkSaving
+                  ? "bg-gray-400 cursor-not-allowed"
+                  : "bg-gray-500 hover:bg-gray-600"
+              } text-white`}
             >
               ❌ Batal
             </button>
@@ -777,13 +844,13 @@ const StudentDataTab: React.FC<{
       {/* Daftar Siswa */}
       <div className="bg-white p-6 rounded-lg shadow-md">
         <h3 className="text-lg font-semibold text-gray-700 mb-4">
-          Daftar Siswa dari Sheet DataSiswa ({filteredStudents.length})
+          Daftar Siswa ({filteredStudents.length})
         </h3>
         {filteredStudents.length === 0 ? (
           <p className="text-center text-gray-500 py-8">
             {searchQuery || selectedKelas !== "Semua"
               ? "Tidak ada siswa yang cocok dengan pencarian atau filter kelas."
-              : "Belum ada data siswa di sheet DataSiswa."}
+              : "Belum ada data siswa."}
           </p>
         ) : (
           <div className="space-y-3">
@@ -801,15 +868,25 @@ const StudentDataTab: React.FC<{
                 <div className="flex gap-2">
                   <button
                     onClick={() => handleEditStudent(s)}
-                    className="text-xs bg-yellow-500 hover:bg-yellow-600 text-white px-3 py-1 rounded"
+                    disabled={isEditing}
+                    className={`text-xs px-3 py-1 rounded transition-colors ${
+                      isEditing
+                        ? "bg-yellow-400 cursor-not-allowed"
+                        : "bg-yellow-500 hover:bg-yellow-600"
+                    } text-white`}
                   >
-                    ✏️ Edit
+                    {isEditing ? "⏳" : "✏️"} Edit
                   </button>
                   <button
                     onClick={() => handleDeleteStudent(s.nisn)}
-                    className="text-xs bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded"
+                    disabled={isDeleting}
+                    className={`text-xs px-3 py-1 rounded transition-colors ${
+                      isDeleting
+                        ? "bg-red-400 cursor-not-allowed"
+                        : "bg-red-500 hover:bg-red-600"
+                    } text-white`}
                   >
-                    🗑️ Hapus
+                    {isDeleting ? "⏳" : "🗑️"} Hapus
                   </button>
                 </div>
               </div>
@@ -831,6 +908,7 @@ const AttendanceTab: React.FC<{
   );
   const [selectedKelas, setSelectedKelas] = useState<string>("Semua");
   const [showDebugInfo, setShowDebugInfo] = useState<boolean>(false);
+  const [isSaving, setIsSaving] = useState<boolean>(false); // Add this line
 
   const uniqueClasses = React.useMemo(() => {
     console.log("Memproses siswa untuk kelas:", students);
@@ -913,6 +991,8 @@ const AttendanceTab: React.FC<{
   };
 
   const handleSave = () => {
+    setIsSaving(true); // Set saving state to true
+
     const formattedDate = formatDateDDMMYYYY(date);
     const studentsToSave =
       selectedKelas === "Semua" ? students : filteredStudents;
@@ -938,8 +1018,12 @@ const AttendanceTab: React.FC<{
             : `✅ Data absensi kelas ${selectedKelas} berhasil dikirim!`;
         alert(message);
         onRecapRefresh();
+        setIsSaving(false); // Reset saving state on success
       })
-      .catch(() => alert("❌ Gagal kirim data absensi."));
+      .catch(() => {
+        alert("❌ Gagal kirim data absensi.");
+        setIsSaving(false); // Reset saving state on error
+      });
   };
 
   const statusColor: Record<AttendanceStatus, string> = {
@@ -1166,12 +1250,19 @@ const AttendanceTab: React.FC<{
 
             <button
               onClick={handleSave}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg font-bold shadow-md transition-colors"
+              disabled={isSaving}
+              className={`w-full py-3 rounded-lg font-bold shadow-md transition-colors ${
+                isSaving
+                  ? "bg-blue-400 cursor-not-allowed"
+                  : "bg-blue-600 hover:bg-blue-700"
+              } text-white`}
             >
-              💾 Simpan Absensi{" "}
-              {selectedKelas !== "Semua"
-                ? `Kelas ${selectedKelas}`
-                : "Semua Kelas"}
+              {isSaving
+                ? "⏳ Menyimpan..."
+                : "💾 Simpan Absensi " +
+                  (selectedKelas !== "Semua"
+                    ? `Kelas ${selectedKelas}`
+                    : "Semua Kelas")}
             </button>
           </>
         )}
@@ -1186,7 +1277,7 @@ const MonthlyRecapTab: React.FC<{
 }> = ({ onRefresh, uniqueClasses }) => {
   const [recapData, setRecapData] = useState<MonthlyRecap[]>([]);
   const [selectedKelas, setSelectedKelas] = useState<string>("Semua");
-  const [selectedBulan, setSelectedBulan] = useState<string>("Januari");
+  const [selectedBulan, setSelectedBulan] = useState<string>("Oktober");
   const [selectedDate, setSelectedDate] = useState<string>(
     new Date().toISOString().split("T")[0]
   );
@@ -1290,7 +1381,6 @@ const MonthlyRecapTab: React.FC<{
 
   const downloadExcel = () => {
     const headers = [
-      "No",
       "Nama",
       "Kelas",
       "Hadir",
@@ -1301,8 +1391,7 @@ const MonthlyRecapTab: React.FC<{
     ];
     const data = [
       headers,
-      ...filteredRecapData.map((item, index) => [
-        index + 1,
+      ...filteredRecapData.map((item) => [
         item.nama || "N/A",
         item.kelas || "N/A",
         item.hadir || 0,
@@ -1312,7 +1401,6 @@ const MonthlyRecapTab: React.FC<{
         item.persenHadir !== undefined ? `${item.persenHadir}%` : "N/A",
       ]),
       [
-        "",
         "TOTAL",
         "",
         statusSummary.Hadir,
@@ -1322,7 +1410,6 @@ const MonthlyRecapTab: React.FC<{
         "",
       ],
       [
-        "",
         "PERSEN",
         "",
         `${(
@@ -1383,12 +1470,12 @@ const MonthlyRecapTab: React.FC<{
       ws[cellAddress] = { ...ws[cellAddress], s: headerStyle };
     });
     const totalRow = filteredRecapData.length + 1;
-    ["A", "B", "C", "D", "E", "F", "G", "H"].forEach((col, idx) => {
+    ["A", "B", "C", "D", "E", "F", "G"].forEach((col, idx) => {
       const cellAddress = `${col}${totalRow}`;
       ws[cellAddress] = { ...ws[cellAddress], s: totalStyle };
     });
     const percentRow = filteredRecapData.length + 2;
-    ["A", "B", "C", "D", "E", "F", "G", "H"].forEach((col, idx) => {
+    ["A", "B", "C", "D", "E", "F", "G"].forEach((col, idx) => {
       const cellAddress = `${col}${percentRow}`;
       ws[cellAddress] = { ...ws[cellAddress], s: percentStyle };
     });
@@ -1430,7 +1517,6 @@ const MonthlyRecapTab: React.FC<{
 
     // Table headers and data
     const headers = [
-      "No",
       "Nama",
       "Kelas",
       "Hadir",
@@ -1439,8 +1525,7 @@ const MonthlyRecapTab: React.FC<{
       "Sakit",
       "% Hadir",
     ];
-    const body = filteredRecapData.map((item, index) => [
-      index + 1,
+    const body = filteredRecapData.map((item) => [
       item.nama || "N/A",
       item.kelas || "N/A",
       item.hadir || 0,
@@ -1451,7 +1536,6 @@ const MonthlyRecapTab: React.FC<{
     ]);
 
     const totalRow = [
-      "",
       "TOTAL",
       "",
       statusSummary.Hadir,
@@ -1462,7 +1546,6 @@ const MonthlyRecapTab: React.FC<{
     ];
 
     const percentRow = [
-      "",
       "PERSEN",
       "",
       `${(
@@ -1512,14 +1595,13 @@ const MonthlyRecapTab: React.FC<{
       },
       alternateRowStyles: { fillColor: [240, 240, 240] },
       columnStyles: {
-        0: { cellWidth: 15 },
-        1: { cellWidth: 45 },
+        0: { cellWidth: 50 },
+        1: { cellWidth: 20 },
         2: { cellWidth: 20 },
         3: { cellWidth: 20 },
         4: { cellWidth: 20 },
         5: { cellWidth: 20 },
         6: { cellWidth: 20 },
-        7: { cellWidth: 20 },
       },
     });
 
@@ -1539,7 +1621,9 @@ const MonthlyRecapTab: React.FC<{
       });
       const placeDateText = `${placeName}, ${formattedDate}`;
       const rightColumnX = pageWidth - margin - 50; // Signature width is 50
-      doc.text(placeDateText, rightColumnX + 25, currentY, { align: "center" });
+      doc.text(placeDateText, rightColumnX + 25, currentY - 1, {
+        align: "center",
+      });
       currentY += 5; // Keep close to "Guru Kelas"
 
       // Principal Section
@@ -1547,19 +1631,19 @@ const MonthlyRecapTab: React.FC<{
         "Kepala Sekolah,",
         "",
         "",
-        schoolData.namaKepsek || "N/A",
+        `( ${schoolData.namaKepsek || "N/A"} )`,
         `NIP: ${schoolData.nipKepsek || "N/A"}`,
       ];
       const teacherText = [
         "Guru Kelas,",
         "",
         "",
-        schoolData.namaGuru || "N/A",
+        `( ${schoolData.namaGuru || "N/A"} )`,
         `NIP: ${schoolData.nipGuru || "N/A"}`,
       ];
 
       // Calculate width for signatures
-      const signatureWidth = 50;
+      const signatureWidth = 30;
       const signatureHeight = 20;
       const leftColumnX = margin;
 
@@ -1568,100 +1652,108 @@ const MonthlyRecapTab: React.FC<{
         doc.addImage(
           schoolData.ttdKepsek,
           "PNG",
-          leftColumnX,
-          currentY,
+          leftColumnX + 10,
+          currentY - 3,
           signatureWidth,
           signatureHeight
         );
       }
 
       // Pisahkan "Kepala Sekolah" dengan posisi yang lebih tinggi
-      doc.text("Kepala Sekolah,", leftColumnX + 25, currentY, {
+      doc.text("Kepala Sekolah,", leftColumnX + 25, currentY - 2, {
         align: "center",
       });
 
-      // Sisa teks (nama dan NIP) dengan format bold dan underline untuk nama
-      principalText.slice(1).forEach((line, index) => {
-        if (index === 2 && line !== "N/A") {
-          doc.setFont("Times", "bold");
-          doc.setDrawColor(0);
-          const textWidth = doc.getTextWidth(line);
-          const textX = leftColumnX + 25 - textWidth / 2;
-          doc.text(
-            line,
-            leftColumnX + 25,
-            currentY + (index + 2) * lineSpacing,
-            {
-              align: "center",
-            }
-          );
-          doc.line(
-            textX,
-            currentY + (index + 2) * lineSpacing + 1,
-            textX + textWidth,
-            currentY + (index + 2) * lineSpacing + 1
-          );
-          doc.setFont("Times", "roman");
-        } else {
-          doc.text(
-            line,
-            leftColumnX + 25,
-            currentY + (index + 2) * lineSpacing,
-            {
-              align: "center",
-            }
-          );
-        }
+      // Kosong dan kosong
+      doc.text("", leftColumnX + 25, currentY + lineSpacing, {
+        align: "center",
       });
+      doc.text("", leftColumnX + 25, currentY + 2 * lineSpacing, {
+        align: "center",
+      });
+
+      // Nama kepala sekolah dengan format bold dan underline
+      const principalName = schoolData.namaKepsek || "N/A";
+      doc.setFont("Times", "bold");
+      doc.text(principalName, leftColumnX + 25, currentY + 3.5 * lineSpacing, {
+        align: "center",
+      });
+
+      // Add underline to principal name
+      const principalNameText = principalName;
+      const textWidth = doc.getTextWidth(principalNameText);
+      const textX = leftColumnX + 25 - textWidth / 2;
+      doc.line(
+        textX,
+        currentY + 3.5 * lineSpacing + 1,
+        textX + textWidth,
+        currentY + 3.5 * lineSpacing + 1
+      );
+
+      // Reset font and add NIP
+      doc.setFont("Times", "roman");
+      doc.text(
+        `NIP. ${schoolData.nipKepsek || "N/A"}`,
+        leftColumnX + 25,
+        currentY + 4.5 * lineSpacing,
+        {
+          align: "center",
+        }
+      );
 
       // Teacher signature and text
       if (schoolData.ttdGuru) {
         doc.addImage(
           schoolData.ttdGuru,
           "PNG",
-          rightColumnX,
-          currentY,
+          rightColumnX + 10,
+          currentY - 5,
           signatureWidth,
           signatureHeight
         );
       }
 
       // Pisahkan "Guru Kelas" dengan posisi yang lebih tinggi
-      doc.text("Guru Kelas,", rightColumnX + 25, currentY, { align: "center" });
-
-      // Sisa teks (nama dan NIP) dengan format bold dan underline untuk nama
-      teacherText.slice(1).forEach((line, index) => {
-        if (index === 2 && line !== "N/A") {
-          doc.setFont("Times", "bold");
-          doc.setDrawColor(0);
-          const textWidth = doc.getTextWidth(line);
-          const textX = rightColumnX + 25 - textWidth / 2;
-          doc.text(
-            line,
-            rightColumnX + 25,
-            currentY + (index + 2) * lineSpacing,
-            {
-              align: "center",
-            }
-          );
-          doc.line(
-            textX,
-            currentY + (index + 2) * lineSpacing + 1,
-            textX + textWidth,
-            currentY + (index + 2) * lineSpacing + 1
-          );
-          doc.setFont("Times", "roman");
-        } else {
-          doc.text(
-            line,
-            rightColumnX + 25,
-            currentY + (index + 2) * lineSpacing,
-            {
-              align: "center",
-            }
-          );
-        }
+      doc.text("Guru Kelas,", rightColumnX + 25, currentY - 2, {
+        align: "center",
       });
+
+      // Kosong dan kosong
+      doc.text("", rightColumnX + 25, currentY + lineSpacing, {
+        align: "center",
+      });
+      doc.text("", rightColumnX + 25, currentY + 2 * lineSpacing, {
+        align: "center",
+      });
+
+      // Nama guru dengan format bold dan underline
+      const teacherName = schoolData.namaGuru || "N/A";
+      doc.setFont("Times", "bold");
+      doc.text(teacherName, rightColumnX + 25, currentY + 3.5 * lineSpacing, {
+        align: "center",
+      });
+
+      // Add underline to teacher name
+      const teacherNameText = teacherName;
+      const teacherTextWidth = doc.getTextWidth(teacherNameText);
+      const teacherTextX = rightColumnX + 25 - teacherTextWidth / 2;
+      doc.line(
+        teacherTextX,
+        currentY + 3.5 * lineSpacing + 1,
+        teacherTextX + teacherTextWidth,
+        currentY + 3.5 * lineSpacing + 1
+      );
+
+      // Reset font and add NIP
+      doc.setFont("Times", "roman");
+      doc.text(
+        `NIP. ${schoolData.nipGuru || "N/A"}`,
+        rightColumnX + 25,
+        currentY + 4.5 * lineSpacing,
+        {
+          align: "center",
+        }
+      );
     } else {
       doc.setFontSize(10);
       doc.text("Data sekolah tidak tersedia.", margin, currentY);
@@ -1721,24 +1813,34 @@ const MonthlyRecapTab: React.FC<{
               ))}
             </select>
           </div>
-          <div className="text-center">
-            <p className="text-sm text-gray-500 mb-2">Pilih Tanggal</p>
-            <input
-              type="date"
-              value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
-              className="border border-gray-300 rounded-lg px-1 py-0.5 shadow-sm bg-white min-w-32"
-            />
-          </div>
-          <div className="text-center">
-            <p className="text-sm text-gray-500 mb-2">Nama Tempat</p>
-            <input
-              type="text"
-              value={placeName}
-              onChange={(e) => setPlaceName(e.target.value)}
-              placeholder="Masukkan nama tempat"
-              className="border border-gray-300 rounded-lg px-1 py-0.5 shadow-sm bg-white min-w-32"
-            />
+        </div>
+
+        {/* Separator line and PDF settings section */}
+        <div className="border-t border-gray-200 pt-4 mb-6">
+          <p className="text-center text-sm font-medium text-gray-700 mb-4">
+            Pengaturan Tanggal & Nama Tempat <br /> untuk Rekap Bulanan pada
+            File PDF
+          </p>
+          <div className="flex flex-col md:flex-row gap-4 items-center justify-center">
+            <div className="text-center">
+              <p className="text-sm text-gray-500 mb-2">Pilih Tanggal</p>
+              <input
+                type="date"
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                className="border border-gray-300 rounded-lg px-1 py-0.5 shadow-sm bg-white min-w-32"
+              />
+            </div>
+            <div className="text-center">
+              <p className="text-sm text-gray-500 mb-2">Nama Tempat</p>
+              <input
+                type="text"
+                value={placeName}
+                onChange={(e) => setPlaceName(e.target.value)}
+                placeholder="Masukkan nama tempat"
+                className="border border-gray-300 rounded-lg px-1 py-0.5 shadow-sm bg-white min-w-32"
+              />
+            </div>
           </div>
         </div>
 
@@ -1788,9 +1890,6 @@ const MonthlyRecapTab: React.FC<{
               <table className="min-w-full border-collapse border border-gray-200">
                 <thead>
                   <tr className="bg-gray-100">
-                    <th className="border border-gray-200 px-1 py-0.5 text-center text-sm font-semibold text-gray-700">
-                      No
-                    </th>
                     <th className="border border-gray-200 px-1 py-0.5 text-left text-sm font-semibold text-gray-700">
                       Nama
                     </th>
@@ -1820,9 +1919,6 @@ const MonthlyRecapTab: React.FC<{
                       key={index}
                       className={index % 2 === 0 ? "bg-white" : "bg-gray-50"}
                     >
-                      <td className="border border-gray-200 px-1 py-0.5 text-center text-sm text-gray-600">
-                        {index + 1}
-                      </td>
                       <td className="border border-gray-200 px-1 py-0.5 text-sm text-gray-600">
                         {item.nama || "N/A"}
                       </td>
@@ -2159,6 +2255,8 @@ const AttendanceHistoryTab: React.FC<{
   const [editedRecords, setEditedRecords] = useState<
     Record<string, AttendanceStatus>
   >({});
+  const [isDeleting, setIsDeleting] = useState<boolean>(false);
+  const [isSaving, setIsSaving] = useState<boolean>(false);
 
   const formatDateToDDMMYYYY = (dateStr: string): string => {
     if (/^\d{2}\/\d{2}\/\d{4}$/.test(dateStr)) return dateStr;
@@ -2167,12 +2265,10 @@ const AttendanceHistoryTab: React.FC<{
     return `${day}/${month}/${year}`;
   };
 
-  // Fungsi untuk memfilter data yang berisi formula
   const filterNonFormulaData = (
     data: AttendanceHistory[]
   ): AttendanceHistory[] => {
     return data.filter((record) => {
-      // Filter berdasarkan beberapa kondisi untuk menghindari formula
       const hasValidTanggal =
         record.tanggal &&
         !record.tanggal.toString().startsWith("=") &&
@@ -2224,7 +2320,6 @@ const AttendanceHistoryTab: React.FC<{
         !record.status.toString().includes("FORMULA") &&
         ["Hadir", "Izin", "Sakit", "Alpha"].includes(record.status.toString());
 
-      // Hanya tampilkan record yang memiliki semua field valid
       return (
         hasValidTanggal &&
         hasValidNama &&
@@ -2245,7 +2340,6 @@ const AttendanceHistoryTab: React.FC<{
       .then((data) => {
         if (data.success) {
           const newData = data.data || [];
-          // Filter data yang berisi formula sebelum memproses
           const filteredData = filterNonFormulaData(newData);
 
           const updatedData = filteredData.map((record: AttendanceHistory) => {
@@ -2299,6 +2393,7 @@ const AttendanceHistoryTab: React.FC<{
         "Yakin ingin menghapus semua data absensi di sheet 'absensi'? Header tidak akan terhapus."
       )
     ) {
+      setIsDeleting(true);
       fetch(endpoint, {
         method: "POST",
         mode: "no-cors",
@@ -2318,7 +2413,8 @@ const AttendanceHistoryTab: React.FC<{
         })
         .catch(() =>
           alert("❌ Gagal menghapus data absensi di sheet 'absensi'.")
-        );
+        )
+        .finally(() => setIsDeleting(false));
     }
   };
 
@@ -2376,6 +2472,7 @@ const AttendanceHistoryTab: React.FC<{
       return;
     }
 
+    setIsSaving(true);
     const updates = Object.entries(editedRecords).map(([key, status]) => {
       const [tanggal, nisn] = key.split("_");
       return { tanggal, nisn, status };
@@ -2395,7 +2492,8 @@ const AttendanceHistoryTab: React.FC<{
         setEditedRecords({});
         onRefresh();
       })
-      .catch(() => alert("❌ Gagal menyimpan perubahan status kehadiran."));
+      .catch(() => alert("❌ Gagal menyimpan perubahan status kehadiran."))
+      .finally(() => setIsSaving(false));
   };
 
   return (
@@ -2531,16 +2629,26 @@ const AttendanceHistoryTab: React.FC<{
           {Object.keys(editedRecords).length > 0 && (
             <button
               onClick={saveChanges}
-              className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium"
+              disabled={isSaving}
+              className={`px-6 py-2 text-white rounded-lg font-medium ${
+                isSaving
+                  ? "bg-blue-400 cursor-not-allowed"
+                  : "bg-blue-600 hover:bg-blue-700"
+              }`}
             >
-              💾 Simpan Perubahan
+              {isSaving ? "Memproses..." : "💾 Simpan Perubahan"}
             </button>
           )}
           <button
             onClick={handleDeleteAllAttendance}
-            className="px-6 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium"
+            disabled={isDeleting}
+            className={`px-6 py-2 text-white rounded-lg font-medium ${
+              isDeleting
+                ? "bg-red-400 cursor-not-allowed"
+                : "bg-red-600 hover:bg-red-700"
+            }`}
           >
-            🗑️ Hapus Semua Data Absensi
+            {isDeleting ? "Memproses..." : "🗑️ Hapus Semua Data Absensi"}
           </button>
         </div>
       </div>
@@ -2645,7 +2753,6 @@ const SemesterRecapTab: React.FC<{ uniqueClasses: string[] }> = ({
 
   const downloadExcel = () => {
     const headers = [
-      "No",
       "Nama",
       "Kelas",
       "Hadir",
@@ -2656,8 +2763,7 @@ const SemesterRecapTab: React.FC<{ uniqueClasses: string[] }> = ({
     ];
     const data = [
       headers,
-      ...filteredRecapData.map((item, index) => [
-        index + 1,
+      ...filteredRecapData.map((item) => [
         item.nama || "N/A",
         item.kelas || "N/A",
         item.hadir || 0,
@@ -2667,7 +2773,6 @@ const SemesterRecapTab: React.FC<{ uniqueClasses: string[] }> = ({
         item.persenHadir !== undefined ? `${item.persenHadir}%` : "N/A",
       ]),
       [
-        "",
         "TOTAL",
         "",
         statusSummary.Hadir,
@@ -2677,7 +2782,6 @@ const SemesterRecapTab: React.FC<{ uniqueClasses: string[] }> = ({
         "",
       ],
       [
-        "",
         "PERSEN",
         "",
         `${(
@@ -2738,12 +2842,12 @@ const SemesterRecapTab: React.FC<{ uniqueClasses: string[] }> = ({
       ws[cellAddress] = { ...ws[cellAddress], s: headerStyle };
     });
     const totalRow = filteredRecapData.length + 1;
-    ["A", "B", "C", "D", "E", "F", "G", "H"].forEach((col, idx) => {
+    ["A", "B", "C", "D", "E", "F", "G"].forEach((col, idx) => {
       const cellAddress = `${col}${totalRow}`;
       ws[cellAddress] = { ...ws[cellAddress], s: totalStyle };
     });
     const percentRow = filteredRecapData.length + 2;
-    ["A", "B", "C", "D", "E", "F", "G", "H"].forEach((col, idx) => {
+    ["A", "B", "C", "D", "E", "F", "G"].forEach((col, idx) => {
       const cellAddress = `${col}${percentRow}`;
       ws[cellAddress] = { ...ws[cellAddress], s: percentStyle };
     });
@@ -2781,7 +2885,6 @@ const SemesterRecapTab: React.FC<{ uniqueClasses: string[] }> = ({
     currentY += 10;
 
     const headers = [
-      "No",
       "Nama",
       "Kelas",
       "Hadir",
@@ -2790,8 +2893,7 @@ const SemesterRecapTab: React.FC<{ uniqueClasses: string[] }> = ({
       "Sakit",
       "% Hadir",
     ];
-    const body = filteredRecapData.map((item, index) => [
-      index + 1,
+    const body = filteredRecapData.map((item) => [
       item.nama || "N/A",
       item.kelas || "N/A",
       item.hadir || 0,
@@ -2802,7 +2904,6 @@ const SemesterRecapTab: React.FC<{ uniqueClasses: string[] }> = ({
     ]);
 
     const totalRow = [
-      "",
       "TOTAL",
       "",
       statusSummary.Hadir,
@@ -2812,7 +2913,6 @@ const SemesterRecapTab: React.FC<{ uniqueClasses: string[] }> = ({
       "",
     ];
     const percentRow = [
-      "",
       "PERSEN",
       "",
       `${(
@@ -2862,14 +2962,13 @@ const SemesterRecapTab: React.FC<{ uniqueClasses: string[] }> = ({
       },
       alternateRowStyles: { fillColor: [240, 240, 240] },
       columnStyles: {
-        0: { cellWidth: 15 },
-        1: { cellWidth: 45 },
+        0: { cellWidth: 50 },
+        1: { cellWidth: 20 },
         2: { cellWidth: 20 },
         3: { cellWidth: 20 },
         4: { cellWidth: 20 },
         5: { cellWidth: 20 },
         6: { cellWidth: 20 },
-        7: { cellWidth: 20 },
       },
     });
 
@@ -2886,117 +2985,150 @@ const SemesterRecapTab: React.FC<{ uniqueClasses: string[] }> = ({
       });
       const placeDateText = `${placeName}, ${formattedDate}`;
       const rightColumnX = pageWidth - margin - 50;
-      doc.text(placeDateText, rightColumnX + 25, currentY, { align: "center" });
+      doc.text(placeDateText, rightColumnX + 25, currentY - 1, {
+        align: "center",
+      });
       currentY += 5;
 
       const principalText = [
         "Kepala Sekolah,",
         "",
         "",
-        schoolData.namaKepsek || "N/A",
+        `( ${schoolData.namaKepsek || "N/A"} )`,
         `NIP: ${schoolData.nipKepsek || "N/A"}`,
       ];
       const teacherText = [
         "Guru Kelas,",
         "",
         "",
-        schoolData.namaGuru || "N/A",
+        `( ${schoolData.namaGuru || "N/A"} )`,
         `NIP: ${schoolData.nipGuru || "N/A"}`,
       ];
 
-      const signatureWidth = 50;
+      const signatureWidth = 30;
       const signatureHeight = 20;
       const leftColumnX = margin;
 
+      // Principal signature and text
       if (schoolData.ttdKepsek) {
         doc.addImage(
           schoolData.ttdKepsek,
           "PNG",
-          leftColumnX,
-          currentY,
+          leftColumnX + 10,
+          currentY - 3,
           signatureWidth,
           signatureHeight
         );
       }
-      doc.text("Kepala Sekolah,", leftColumnX + 25, currentY, {
+
+      // Pisahkan "Kepala Sekolah" dengan posisi yang lebih tinggi
+      doc.text("Kepala Sekolah,", leftColumnX + 25, currentY - 2, {
         align: "center",
       });
-      principalText.slice(1).forEach((line, index) => {
-        if (index === 2 && line !== "N/A") {
-          doc.setFont("Times", "bold");
-          doc.setDrawColor(0);
-          const textWidth = doc.getTextWidth(line);
-          const textX = leftColumnX + 25 - textWidth / 2;
-          doc.text(
-            line,
-            leftColumnX + 25,
-            currentY + (index + 2) * lineSpacing,
-            {
-              align: "center",
-            }
-          );
-          doc.line(
-            textX,
-            currentY + (index + 2) * lineSpacing + 1,
-            textX + textWidth,
-            currentY + (index + 2) * lineSpacing + 1
-          );
-          doc.setFont("Times", "roman");
-        } else {
-          doc.text(
-            line,
-            leftColumnX + 25,
-            currentY + (index + 2) * lineSpacing,
-            {
-              align: "center",
-            }
-          );
-        }
+
+      // Kosong dan kosong
+      doc.text("", leftColumnX + 25, currentY + lineSpacing, {
+        align: "center",
+      });
+      doc.text("", leftColumnX + 25, currentY + 2 * lineSpacing, {
+        align: "center",
       });
 
+      // Pisahkan "Kepala Sekolah" dengan posisi yang lebih tinggi
+      doc.text("Kepala Sekolah,", leftColumnX + 25, currentY - 2, {
+        align: "center",
+      });
+
+      // Kosong dan kosong
+      doc.text("", leftColumnX + 25, currentY + lineSpacing, {
+        align: "center",
+      });
+      doc.text("", leftColumnX + 25, currentY + 2 * lineSpacing, {
+        align: "center",
+      });
+
+      // Nama kepala sekolah dengan format bold dan underline
+      const principalName = schoolData.namaKepsek || "N/A";
+      doc.setFont("Times", "bold");
+      doc.text(principalName, leftColumnX + 25, currentY + 3.5 * lineSpacing, {
+        align: "center",
+      });
+
+      // Add underline to principal name
+      const principalNameText = principalName;
+      const textWidth = doc.getTextWidth(principalNameText);
+      const textX = leftColumnX + 25 - textWidth / 2;
+      doc.line(
+        textX,
+        currentY + 3.5 * lineSpacing + 1,
+        textX + textWidth,
+        currentY + 3.5 * lineSpacing + 1
+      );
+
+      // Reset font and add NIP
+      doc.setFont("Times", "roman");
+      doc.text(
+        `NIP. ${schoolData.nipKepsek || "N/A"}`,
+        leftColumnX + 25,
+        currentY + 4.5 * lineSpacing,
+        {
+          align: "center",
+        }
+      );
+
+      // Teacher signature and text
       if (schoolData.ttdGuru) {
         doc.addImage(
           schoolData.ttdGuru,
           "PNG",
-          rightColumnX,
-          currentY,
+          rightColumnX + 10,
+          currentY - 5,
           signatureWidth,
           signatureHeight
         );
       }
-      doc.text("Guru Kelas,", rightColumnX + 25, currentY, { align: "center" });
-      teacherText.slice(1).forEach((line, index) => {
-        if (index === 2 && line !== "N/A") {
-          doc.setFont("Times", "bold");
-          doc.setDrawColor(0);
-          const textWidth = doc.getTextWidth(line);
-          const textX = rightColumnX + 25 - textWidth / 2;
-          doc.text(
-            line,
-            rightColumnX + 25,
-            currentY + (index + 2) * lineSpacing,
-            {
-              align: "center",
-            }
-          );
-          doc.line(
-            textX,
-            currentY + (index + 2) * lineSpacing + 1,
-            textX + textWidth,
-            currentY + (index + 2) * lineSpacing + 1
-          );
-          doc.setFont("Times", "roman");
-        } else {
-          doc.text(
-            line,
-            rightColumnX + 25,
-            currentY + (index + 2) * lineSpacing,
-            {
-              align: "center",
-            }
-          );
-        }
+
+      // Pisahkan "Guru Kelas" dengan posisi yang lebih tinggi
+      doc.text("Guru Kelas,", rightColumnX + 25, currentY - 2, {
+        align: "center",
       });
+
+      // Kosong dan kosong
+      doc.text("", rightColumnX + 25, currentY + lineSpacing, {
+        align: "center",
+      });
+      doc.text("", rightColumnX + 25, currentY + 2 * lineSpacing, {
+        align: "center",
+      });
+
+      // Nama guru dengan format bold dan underline
+      const teacherName = schoolData.namaGuru || "N/A";
+      doc.setFont("Times", "bold");
+      doc.text(teacherName, rightColumnX + 25, currentY + 3.5 * lineSpacing, {
+        align: "center",
+      });
+
+      // Add underline to teacher name
+      const teacherNameText = teacherName;
+      const teacherTextWidth = doc.getTextWidth(teacherNameText);
+      const teacherTextX = rightColumnX + 25 - teacherTextWidth / 2;
+      doc.line(
+        teacherTextX,
+        currentY + 3.5 * lineSpacing + 1,
+        teacherTextX + teacherTextWidth,
+        currentY + 3.5 * lineSpacing + 1
+      );
+
+      // Reset font and add NIP
+      doc.setFont("Times", "roman");
+      doc.text(
+        `NIP. ${schoolData.nipGuru || "N/A"}`,
+        rightColumnX + 25,
+        currentY + 4.5 * lineSpacing,
+        {
+          align: "center",
+        }
+      );
     } else {
       doc.setFontSize(10);
       doc.text("Data sekolah tidak tersedia.", margin, currentY);
@@ -3050,24 +3182,34 @@ const SemesterRecapTab: React.FC<{ uniqueClasses: string[] }> = ({
               <option value="2">Semester 2</option>
             </select>
           </div>
-          <div className="text-center">
-            <p className="text-sm text-gray-500 mb-2">Pilih Tanggal</p>
-            <input
-              type="date"
-              value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
-              className="border border-gray-300 rounded-lg px-1 py-0.5 shadow-sm bg-white min-w-32"
-            />
-          </div>
-          <div className="text-center">
-            <p className="text-sm text-gray-500 mb-2">Nama Tempat</p>
-            <input
-              type="text"
-              value={placeName}
-              onChange={(e) => setPlaceName(e.target.value)}
-              placeholder="Masukkan nama tempat"
-              className="border border-gray-300 rounded-lg px-1 py-0.5 shadow-sm bg-white min-w-32"
-            />
+        </div>
+
+        {/* Separator line and PDF settings section */}
+        <div className="border-t border-gray-200 pt-4 mb-6">
+          <p className="text-center text-sm font-medium text-gray-700 mb-4">
+            Pengaturan Tanggal & Nama Tempat <br /> untuk Rekap Semester pada
+            File PDF
+          </p>
+          <div className="flex flex-col md:flex-row gap-4 items-center justify-center">
+            <div className="text-center">
+              <p className="text-sm text-gray-500 mb-2">Pilih Tanggal</p>
+              <input
+                type="date"
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                className="border border-gray-300 rounded-lg px-1 py-0.5 shadow-sm bg-white min-w-32"
+              />
+            </div>
+            <div className="text-center">
+              <p className="text-sm text-gray-500 mb-2">Nama Tempat</p>
+              <input
+                type="text"
+                value={placeName}
+                onChange={(e) => setPlaceName(e.target.value)}
+                placeholder="Masukkan nama tempat"
+                className="border border-gray-300 rounded-lg px-1 py-0.5 shadow-sm bg-white min-w-32"
+              />
+            </div>
           </div>
         </div>
 
@@ -3118,9 +3260,6 @@ const SemesterRecapTab: React.FC<{ uniqueClasses: string[] }> = ({
               <table className="min-w-full border-collapse border border-gray-200">
                 <thead>
                   <tr className="bg-gray-100">
-                    <th className="border border-gray-200 px-1 py-0.5 text-center text-sm font-semibold text-gray-700">
-                      No
-                    </th>
                     <th className="border border-gray-200 px-1 py-0.5 text-left text-sm font-semibold text-gray-700">
                       Nama
                     </th>
@@ -3150,9 +3289,6 @@ const SemesterRecapTab: React.FC<{ uniqueClasses: string[] }> = ({
                       key={index}
                       className={index % 2 === 0 ? "bg-white" : "bg-gray-50"}
                     >
-                      <td className="border border-gray-200 px-1 py-0.5 text-center text-sm text-gray-600">
-                        {index + 1}
-                      </td>
                       <td className="border border-gray-200 px-1 py-0.5 text-sm text-gray-600">
                         {item.nama || "N/A"}
                       </td>
@@ -3470,7 +3606,9 @@ const SplashScreen: React.FC = () => {
         alt="Logo Aplikasi"
         className="w-52 h-70 mb-4 animate-pulse-custom" //Pengaturan ukuran logo
       />
-      <p className="text-gray-800 text-lg font-semibold mt-6">Ronaldi, S.Pd</p>
+      <p className="text-gray-800 text-lg font-semibold mt-6">
+        Ronaldi, S.Pd
+      </p>
     </div>
   );
 };
