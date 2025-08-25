@@ -28,7 +28,7 @@ ChartJS.register(
 );
 
 const endpoint =
-  "https://script.google.com/macros/s/AKfycbyVwU9RzW4Zw6w4_4xyJBrZULStnCX6OIgaYaIA6sgajL1_G7R-JotvhS6wpPMqhiZ0/exec";
+  "https://script.google.com/macros/s/AKfycbxB1WO7DXWe6--9QXf-IlZoZlyZAvCtnrrfp5vGhX_W-nbOkGne1JuYnz7vl_v4pD-U/exec";
 const SHEET_SEMESTER1 = "RekapSemester1";
 const SHEET_SEMESTER2 = "RekapSemester2";
 
@@ -95,6 +95,7 @@ interface AttendanceHistory {
   kelas: string;
   nisn: string;
   status: AttendanceStatus;
+  duplikat: string;
 }
 
 interface SemesterRecap {
@@ -2320,12 +2321,24 @@ const AttendanceHistoryTab: React.FC<{
         !record.status.toString().includes("FORMULA") &&
         ["Hadir", "Izin", "Sakit", "Alpha"].includes(record.status.toString());
 
+      // Tambahkan validasi untuk kolom duplikat: hanya ambil jika nilai eksak "-", dan bukan formula/error
+      const hasValidDuplikat =
+        record.duplikat &&
+        record.duplikat.toString().trim() === "-" && // Hanya ambil jika "-"
+        !record.duplikat.toString().startsWith("=") &&
+        record.duplikat.toString() !== "#N/A" &&
+        record.duplikat.toString() !== "#REF!" &&
+        record.duplikat.toString() !== "#VALUE!" &&
+        record.duplikat.toString() !== "#ERROR!" &&
+        !record.duplikat.toString().includes("FORMULA");
+
       return (
         hasValidTanggal &&
         hasValidNama &&
         hasValidNisn &&
         hasValidKelas &&
-        hasValidStatus
+        hasValidStatus &&
+        hasValidDuplikat // Tambahkan ini untuk memfilter berdasarkan duplikat = "-"
       );
     });
   };
