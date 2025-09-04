@@ -904,12 +904,31 @@ const AttendanceTab: React.FC<{
   onRecapRefresh: () => void;
 }> = ({ students, onRecapRefresh }) => {
   const [attendance, setAttendance] = useState<AttendanceRecord>({});
-  const [date, setDate] = useState<string>(
-    new Date().toISOString().split("T")[0]
-  );
+
+  // Perbaikan: Gunakan tanggal lokal dengan benar, bukan dari toISOString() yang berbasis UTC
+  const getLocalDate = () => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const day = String(now.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  };
+
+  const [date, setDate] = useState<string>(getLocalDate());
+
   const [selectedKelas, setSelectedKelas] = useState<string>("Semua");
   const [showDebugInfo, setShowDebugInfo] = useState<boolean>(false);
-  const [isSaving, setIsSaving] = useState<boolean>(false); // Add this line
+  const [isSaving, setIsSaving] = useState<boolean>(false);
+
+  // NEW: State untuk menyimpan ID siswa yang sudah memiliki data existing (granular per siswa)
+  const [existingStudentIds, setExistingStudentIds] = useState<Set<string>>(
+    new Set()
+  );
+  const [isLoadingExistingData, setIsLoadingExistingData] =
+    useState<boolean>(false);
+  const [existingAttendanceData, setExistingAttendanceData] = useState<any[]>(
+    []
+  );
 
   const uniqueClasses = React.useMemo(() => {
     console.log("Memproses siswa untuk kelas:", students);
@@ -976,6 +995,108 @@ const AttendanceTab: React.FC<{
     });
   }, [students, selectedKelas]);
 
+  // NEW: Function untuk memuat data absensi yang sudah ada
+  const loadExistingAttendanceData = async () => {
+    setIsLoadingExistingData(true);
+    console.log(
+      "🔍 Memuat data existing untuk tanggal:",
+      date,
+      "kelas:",
+      selectedKelas
+    );
+
+    // Reset state terlebih dahulu
+    setExistingStudentIds(new Set());
+    setExistingAttendanceData([]);
+
+    try {
+      const formattedDate = formatDateDDMMYYYY(date);
+      console.log("📅 Formatted date:", formattedDate);
+
+      // Gunakan action attendanceHistory yang sudah ada
+      const url = `${endpoint}?action=attendanceHistory`;
+      console.log("🌐 Fetching URL:", url);
+
+      const response = await fetch(url, {
+        method: "GET",
+        mode: "cors",
+      });
+
+      console.log("📡 Response status:", response.status);
+
+      if (response.ok) {
+        const result = await response.json();
+        console.log("📊 Response result:", result);
+
+        if (result.success && result.data) {
+          const allAttendanceData = result.data;
+
+          // Filter data berdasarkan tanggal dan kelas
+          const filteredData = allAttendanceData.filter((record: any) => {
+            const matchesDate = record.tanggal === formattedDate;
+            const matchesClass =
+              selectedKelas === "Semua" ||
+              String(record.kelas).trim() === selectedKelas;
+            return matchesDate && matchesClass;
+          });
+
+          console.log("📊 Filtered data:", filteredData);
+          setExistingAttendanceData(filteredData);
+
+          // Populate attendance state dan track existing student IDs
+          const existingAttendanceRecord: { [key: string]: AttendanceStatus } =
+            {};
+          const existingIds = new Set<string>();
+
+          const studentsToCheck =
+            selectedKelas === "Semua" ? students : filteredStudents;
+          studentsToCheck.forEach((student) => {
+            const existingRecord = filteredData.find(
+              (record: any) => record.nama === student.name
+            );
+
+            if (existingRecord) {
+              existingAttendanceRecord[student.id] =
+                existingRecord.status as AttendanceStatus;
+              existingIds.add(student.id);
+              console.log(
+                `👤 ${student.name}: ${existingRecord.status} (existing)`
+              );
+            } else {
+              existingAttendanceRecord[student.id] = "Hadir";
+              console.log(`👤 ${student.name}: Hadir (default)`);
+            }
+          });
+
+          setAttendance((prev) => ({
+            ...prev,
+            [date]: existingAttendanceRecord,
+          }));
+
+          setExistingStudentIds(existingIds);
+
+          console.log("✅ Existing student IDs:", Array.from(existingIds));
+        } else {
+          console.log("❌ No data or unsuccessful response:", result);
+        }
+      } else {
+        console.log("❌ Response not OK, status:", response.status);
+      }
+    } catch (error) {
+      console.error("❌ Error loading existing attendance data:", error);
+    }
+
+    setIsLoadingExistingData(false);
+  };
+
+  // NEW: UseEffect untuk memuat data existing ketika date atau selectedKelas berubah
+  useEffect(() => {
+    if (students.length > 0) {
+      // Gunakan loadExistingAttendanceData() yang sudah menggunakan attendanceHistory
+      loadExistingAttendanceData();
+    }
+  }, [date, selectedKelas, students]);
+
   useEffect(() => {
     if (students.length && !attendance[date]) {
       const init: { [key: string]: AttendanceStatus } = {};
@@ -985,6 +1106,11 @@ const AttendanceTab: React.FC<{
   }, [date, students, attendance]);
 
   const setStatus = (sid: string, status: AttendanceStatus) => {
+    // NEW: Jika siswa ini sudah memiliki data existing, jangan izinkan perubahan
+    if (existingStudentIds.has(sid)) {
+      return;
+    }
+
     setAttendance((prev) => ({
       ...prev,
       [date]: { ...prev[date], [sid]: status },
@@ -992,11 +1118,20 @@ const AttendanceTab: React.FC<{
   };
 
   const handleSave = () => {
-    setIsSaving(true); // Set saving state to true
+    setIsSaving(true);
 
     const formattedDate = formatDateDDMMYYYY(date);
-    const studentsToSave =
-      selectedKelas === "Semua" ? students : filteredStudents;
+    const studentsToSave = (
+      selectedKelas === "Semua" ? students : filteredStudents
+    ).filter((s) => !existingStudentIds.has(s.id)); // NEW: Hanya siswa yang belum existing
+
+    if (studentsToSave.length === 0) {
+      alert(
+        "✅ Semua siswa sudah diabsen. Tidak ada data baru untuk disimpan."
+      );
+      setIsSaving(false);
+      return;
+    }
 
     const data = studentsToSave.map((s) => ({
       tanggal: formattedDate,
@@ -1015,15 +1150,16 @@ const AttendanceTab: React.FC<{
       .then(() => {
         const message =
           selectedKelas === "Semua"
-            ? "✅ Data absensi semua kelas berhasil dikirim!"
-            : `✅ Data absensi kelas ${selectedKelas} berhasil dikirim!`;
+            ? "✅ Data absensi siswa baru semua kelas berhasil dikirim!"
+            : `✅ Data absensi siswa baru kelas ${selectedKelas} berhasil dikirim!`;
         alert(message);
         onRecapRefresh();
-        setIsSaving(false); // Reset saving state on success
+        loadExistingAttendanceData(); // NEW: Reload data existing setelah save
+        setIsSaving(false);
       })
       .catch(() => {
         alert("❌ Gagal kirim data absensi.");
-        setIsSaving(false); // Reset saving state on error
+        setIsSaving(false);
       });
   };
 
@@ -1045,12 +1181,56 @@ const AttendanceTab: React.FC<{
 
   const attendanceSummary = getAttendanceSummary();
 
+  // NEW: Cek apakah semua siswa sudah memiliki data existing
+  const allStudentsHaveData =
+    existingStudentIds.size === filteredStudents.length;
+
   return (
     <div className="max-w-4xl mx-auto" style={{ paddingBottom: "70px" }}>
       <div className="bg-white p-6 rounded-lg shadow-md">
         <h2 className="text-2xl font-bold text-center text-blue-700 mb-6">
           📋 Absensi Siswa
         </h2>
+
+        {/* NEW: Loading indicator */}
+        {isLoadingExistingData && (
+          <div className="mb-4 text-center">
+            <p className="text-blue-600 text-sm">⏳ Memuat data absensi...</p>
+          </div>
+        )}
+
+        {/* NEW: Info jika semua siswa sudah diabsen */}
+        {allStudentsHaveData && !isLoadingExistingData && (
+          <div className="mb-6 bg-green-50 border border-green-200 rounded-lg p-4 text-center">
+            <div className="text-green-700 font-semibold text-lg mb-2">
+              ✅ Semua siswa sudah diabsen
+            </div>
+            <p className="text-green-600 text-sm">
+              Data absensi untuk tanggal {formatDateDDMMYYYY(date)}
+              {selectedKelas !== "Semua" ? ` kelas ${selectedKelas}` : ""} sudah
+              lengkap.
+            </p>
+            <p className="text-green-600 text-xs mt-1">
+              Data di bawah ini adalah data yang sudah tersimpan dan tidak dapat
+              diubah.
+            </p>
+          </div>
+        )}
+
+        {/* NEW: Info jika sebagian siswa sudah diabsen */}
+        {existingStudentIds.size > 0 &&
+          !allStudentsHaveData &&
+          !isLoadingExistingData && (
+            <div className="mb-6 bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-center">
+              <div className="text-yellow-700 font-semibold text-lg mb-2">
+                ⚠️ Sebagian siswa sudah diabsen
+              </div>
+              <p className="text-yellow-600 text-sm">
+                {existingStudentIds.size} dari {filteredStudents.length} siswa
+                sudah memiliki data absensi. Hanya siswa baru yang bisa diabsen.
+              </p>
+            </div>
+          )}
 
         <div className="mb-6 flex flex-col md:flex-row gap-4 items-center justify-center">
           <div className="text-center">
@@ -1109,7 +1289,26 @@ const AttendanceTab: React.FC<{
               <p>
                 <strong>Siswa Terfilter:</strong> {filteredStudents.length}
               </p>
+              {/* NEW: Debug info untuk data existing per siswa */}
+              <p>
+                <strong>Siswa dengan Data Existing:</strong>{" "}
+                {existingStudentIds.size}
+              </p>
+              <p>
+                <strong>Semua Siswa Sudah Diabsen:</strong>{" "}
+                {allStudentsHaveData ? "Ya" : "Tidak"}
+              </p>
+              <p>
+                <strong>Sedang Loading:</strong>{" "}
+                {isLoadingExistingData ? "Ya" : "Tidak"}
+              </p>
+              <p>
+                <strong>Jumlah Record Existing:</strong>{" "}
+                {existingAttendanceData.length}
+              </p>
             </div>
+
+            {/* Existing debug content tetap sama... */}
             <div className="mt-3">
               <p className="font-semibold text-yellow-800 mb-1">
                 Detail Data Siswa per Kelas:
@@ -1213,58 +1412,71 @@ const AttendanceTab: React.FC<{
             <div className="space-y-4 mb-6 overflow-x-auto">
               <table className="w-full border-collapse">
                 <tbody>
-                  {filteredStudents.map((s) => (
-                    <tr key={s.id} className="border-b border-gray-200">
-                      <td style={{ width: "6cm" }} className="p-2">
-                        <p className="text-base font-semibold text-gray-800">
-                          {s.name || "N/A"}
-                        </p>
-                        <p className="text-sm text-gray-500">
-                          Kelas {s.kelas || "N/A"} • NISN: {s.nisn || "N/A"}
-                        </p>
-                      </td>
-                      <td style={{ width: "5cm" }} className="p-2">
-                        <div className="flex justify-between">
-                          {(["Hadir", "Izin", "Sakit", "Alpha"] as const).map(
-                            (status) => (
-                              <button
-                                key={status}
-                                onClick={() => setStatus(s.id, status)}
-                                style={{ width: "1cm" }}
-                                className={`px-1 py-0.5 rounded-lg text-xs font-medium transition-colors ${
-                                  attendance[date]?.[s.id] === status
-                                    ? `${statusColor[status]} text-white`
-                                    : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-100"
-                                }`}
-                              >
-                                {status}
-                              </button>
-                            )
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                  {filteredStudents.map((s) => {
+                    const isExisting = existingStudentIds.has(s.id);
+                    return (
+                      <tr key={s.id} className="border-b border-gray-200">
+                        <td style={{ width: "6cm" }} className="p-2">
+                          <p className="text-base font-semibold text-gray-800">
+                            {s.name || "N/A"}
+                          </p>
+                          <p className="text-sm text-gray-500">
+                            Kelas {s.kelas || "N/A"} • NISN: {s.nisn || "N/A"}
+                          </p>
+                        </td>
+                        <td style={{ width: "5cm" }} className="p-2">
+                          <div className="flex justify-between">
+                            {(["Hadir", "Izin", "Sakit", "Alpha"] as const).map(
+                              (status) => (
+                                <button
+                                  key={status}
+                                  onClick={() => setStatus(s.id, status)}
+                                  style={{ width: "1cm" }}
+                                  className={`px-1 py-0.5 rounded-lg text-xs font-medium transition-colors ${
+                                    attendance[date]?.[s.id] === status
+                                      ? `${statusColor[status]} text-white`
+                                      : isExisting
+                                      ? "bg-gray-200 text-gray-500 cursor-not-allowed" // Disabled style jika existing
+                                      : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-100"
+                                  }`}
+                                  disabled={isExisting} // NEW: Disable per siswa jika existing
+                                >
+                                  {status}
+                                </button>
+                              )
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
 
-            <button
-              onClick={handleSave}
-              disabled={isSaving}
-              className={`w-full py-3 rounded-lg font-bold shadow-md transition-colors ${
-                isSaving
-                  ? "bg-blue-400 cursor-not-allowed"
-                  : "bg-blue-600 hover:bg-blue-700"
-              } text-white`}
-            >
-              {isSaving
-                ? "⏳ Menyimpan..."
-                : "💾 Simpan Absensi " +
-                  (selectedKelas !== "Semua"
-                    ? `Kelas ${selectedKelas}`
-                    : "Semua Kelas")}
-            </button>
+            {/* NEW: Conditional rendering untuk button save atau pesan sudah mengabsen */}
+            {!allStudentsHaveData && !isLoadingExistingData ? (
+              <button
+                onClick={handleSave}
+                disabled={isSaving}
+                className={`w-full py-3 rounded-lg font-bold shadow-md transition-colors ${
+                  isSaving
+                    ? "bg-blue-400 cursor-not-allowed"
+                    : "bg-blue-600 hover:bg-blue-700"
+                } text-white`}
+              >
+                {isSaving
+                  ? "⏳ Menyimpan..."
+                  : "💾 Simpan Absensi Siswa Baru " +
+                    (selectedKelas !== "Semua"
+                      ? `Kelas ${selectedKelas}`
+                      : "Semua Kelas")}
+              </button>
+            ) : !isLoadingExistingData ? (
+              <div className="w-full py-3 rounded-lg font-bold text-center bg-green-100 text-green-700 border border-green-300">
+                ✅ Semua siswa sudah diabsen untuk tanggal ini
+              </div>
+            ) : null}
           </>
         )}
       </div>
