@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import { Canvg } from "canvg";
 import SignatureCanvas from "react-signature-canvas";
 import {
   Chart as ChartJS,
@@ -28,7 +29,7 @@ ChartJS.register(
 );
 
 const endpoint =
-  "https://script.google.com/macros/s/AKfycbxB1WO7DXWe6--9QXf-IlZoZlyZAvCtnrrfp5vGhX_W-nbOkGne1JuYnz7vl_v4pD-U/exec";
+  "https://script.google.com/macros/s/AKfycbymrdGzjxoUyYPjboWuJzswh_EeaJrVqeRN8LzG5UNUI5uqVeRtPqFVFyNUWtlHQm0e/exec";
 const SHEET_SEMESTER1 = "RekapSemester1";
 const SHEET_SEMESTER2 = "RekapSemester2";
 
@@ -37,6 +38,7 @@ interface Student {
   name: string | null | undefined;
   nisn: string | null | undefined;
   kelas: string | null | undefined;
+  jenisKelamin: string | null | undefined;
 }
 
 interface SchoolData {
@@ -46,6 +48,9 @@ interface SchoolData {
   namaGuru: string;
   nipGuru: string;
   ttdGuru: string;
+  namaKota: string;
+  statusGuru: string;
+  namaSekolah: string;
 }
 
 type AttendanceStatus = "Hadir" | "Izin" | "Sakit" | "Alpha";
@@ -95,7 +100,6 @@ interface AttendanceHistory {
   kelas: string;
   nisn: string;
   status: AttendanceStatus;
-  duplikat: string;
 }
 
 interface SemesterRecap {
@@ -108,9 +112,26 @@ interface SemesterRecap {
   persenHadir: number;
 }
 
+interface TanggalMerah {
+  tanggal: string;
+  deskripsi: string;
+  tanggalAkhir?: string;
+}
+
+interface JadwalMengajar {
+  kelas: string;
+  hari: string;
+}
+
 const formatDateDDMMYYYY = (isoDate: string): string => {
   const [year, month, day] = isoDate.split("-");
   return `${day}/${month}/${year}`;
+};
+
+type EditedRecord = {
+  date: string;
+  nisn: string;
+  status: AttendanceStatus | "";
 };
 
 const SchoolDataTab: React.FC<{
@@ -129,6 +150,9 @@ const SchoolDataTab: React.FC<{
   const [isGuruSigning, setIsGuruSigning] = useState(false);
   const kepsekSigCanvas = useRef<SignatureCanvas>(null);
   const guruSigCanvas = useRef<SignatureCanvas>(null);
+  const [namaKota, setNamaKota] = useState("");
+  const [statusGuru, setStatusGuru] = useState("Guru Kelas");
+  const [namaSekolah, setNamaSekolah] = useState("");
 
   useEffect(() => {
     fetch(`${endpoint}?action=schoolData`)
@@ -146,6 +170,9 @@ const SchoolDataTab: React.FC<{
           setNamaGuru(record.namaGuru);
           setNipGuru(record.nipGuru);
           setTtdGuru(record.ttdGuru);
+          setNamaKota(record.namaKota);
+          setStatusGuru(record.statusGuru || "Guru Kelas");
+          setNamaSekolah(record.namaSekolah || "");
         } else {
           setSchoolData(null);
         }
@@ -160,19 +187,22 @@ const SchoolDataTab: React.FC<{
 
   const handleSave = () => {
     if (!namaKepsek || !nipKepsek || !namaGuru || !nipGuru) {
-      alert("⚠️ Semua field wajib diisi kecuali tanda tangan!");
+      alert("⚠️ Nama dan NIP Kepala Sekolah serta Guru wajib diisi!");
       return;
     }
 
-    setIsSaving(true); // Set saving state to true
+    setIsSaving(true);
 
     const data: SchoolData = {
       namaKepsek,
       nipKepsek,
-      ttdKepsek: ttdKepsek || "",
+      ttdKepsek: ttdKepsek || "", // Sudah benar - bisa kosong
       namaGuru,
       nipGuru,
-      ttdGuru: ttdGuru || "",
+      ttdGuru: ttdGuru || "", // Sudah benar - bisa kosong
+      namaKota: namaKota || "",
+      statusGuru: statusGuru || "Guru Kelas",
+      namaSekolah: namaSekolah || "",
     };
 
     fetch(endpoint, {
@@ -204,7 +234,7 @@ const SchoolDataTab: React.FC<{
   };
 
   const handleSaveKepsekSignature = () => {
-    const signature = kepsekSigCanvas.current?.toDataURL("image/png");
+    const signature = kepsekSigCanvas.current?.toDataURL("image/svg+xml"); // Ubah ke SVG
     if (signature && !kepsekSigCanvas.current?.isEmpty()) {
       setTtdKepsek(signature);
       setIsKepsekSigning(false);
@@ -214,7 +244,7 @@ const SchoolDataTab: React.FC<{
   };
 
   const handleSaveGuruSignature = () => {
-    const signature = guruSigCanvas.current?.toDataURL("image/png");
+    const signature = guruSigCanvas.current?.toDataURL("image/svg+xml"); // Ubah ke SVG
     if (signature && !guruSigCanvas.current?.isEmpty()) {
       setTtdGuru(signature);
       setIsGuruSigning(false);
@@ -248,6 +278,47 @@ const SchoolDataTab: React.FC<{
           🏫 Data Sekolah
         </h2>
         <div className="grid grid-cols-1 gap-4 mb-6">
+          <div>
+            <h3 className="text-lg font-semibold text-gray-700 mb-2">
+              Nama Sekolah
+            </h3>
+            <input
+              type="text"
+              placeholder="Nama Sekolah"
+              value={namaSekolah}
+              onChange={(e) => setNamaSekolah(e.target.value)}
+              className="w-full border border-gray-300 px-4 py-2 rounded-lg mb-2"
+              disabled={isSaving}
+            />
+          </div>
+          <div>
+            <h3 className="text-lg font-semibold text-gray-700 mb-2">
+              Kota/Kabupaten
+            </h3>
+            <input
+              type="text"
+              placeholder="Nama Kota/Kabupaten"
+              value={namaKota}
+              onChange={(e) => setNamaKota(e.target.value)}
+              className="w-full border border-gray-300 px-4 py-2 rounded-lg mb-2"
+              disabled={isSaving}
+            />
+          </div>
+          <div>
+            <h3 className="text-lg font-semibold text-gray-700 mb-2">
+              Status Guru
+            </h3>
+            <select
+              value={statusGuru}
+              onChange={(e) => setStatusGuru(e.target.value)}
+              className="w-full border border-gray-300 px-4 py-2 rounded-lg mb-2"
+              disabled={isSaving}
+            >
+              <option value="Guru Kelas">Guru Kelas</option>
+              <option value="Guru PJOK">Guru PJOK</option>
+              <option value="Guru PAI">Guru PAI</option>
+            </select>
+          </div>
           <div>
             <h3 className="text-lg font-semibold text-gray-700 mb-2">
               Kepala Sekolah
@@ -331,11 +402,30 @@ const SchoolDataTab: React.FC<{
               </div>
             </div>
             {ttdKepsek && (
-              <img
-                src={ttdKepsek}
-                alt="Tanda Tangan Kepala Sekolah"
-                className="mt-2 max-w-full h-20 border border-gray-200 rounded-lg"
-              />
+              <>
+                <img
+                  src={ttdKepsek}
+                  alt="Tanda Tangan Kepala Sekolah"
+                  className="mt-2 max-w-full h-20 border border-gray-200 rounded-lg"
+                />
+                <button
+                  onClick={() => {
+                    if (
+                      confirm(
+                        "Hapus tanda tangan Kepala Sekolah yang tersimpan?"
+                      )
+                    ) {
+                      setTtdKepsek("");
+                    }
+                  }}
+                  disabled={isSaving}
+                  className={`mt-2 px-4 py-1 bg-red-500 hover:bg-red-600 text-white rounded-lg text-sm ${
+                    isSaving ? "opacity-50 cursor-not-allowed" : ""
+                  }`}
+                >
+                  🗑️ Hapus TTD Tersimpan
+                </button>
+              </>
             )}
           </div>
           <div>
@@ -345,16 +435,16 @@ const SchoolDataTab: React.FC<{
               placeholder="Nama Guru"
               value={namaGuru}
               onChange={(e) => setNamaGuru(e.target.value)}
-              className="w-full border border-gray-300 px-4 py-2 rounded-lg mb-2"
-              disabled={isSaving} // Disable input during saving
+              className="w-full border border-gray-300 px-4 py-2 rounded-lg mb-2 text-gray-400 bg-gray-50"
+              disabled={true}
             />
             <input
               type="text"
               placeholder="NIP Guru"
               value={nipGuru}
               onChange={(e) => setNipGuru(e.target.value)}
-              className="w-full border border-gray-300 px-4 py-2 rounded-lg mb-2"
-              disabled={isSaving} // Disable input during saving
+              className="w-full border border-gray-300 px-4 py-2 rounded-lg mb-2 text-gray-400 bg-gray-50"
+              disabled={true}
             />
             <div className="mb-2">
               <p className="text-sm text-gray-500 mb-1">Tanda Tangan Guru</p>
@@ -417,11 +507,26 @@ const SchoolDataTab: React.FC<{
               </div>
             </div>
             {ttdGuru && (
-              <img
-                src={ttdGuru}
-                alt="Tanda Tangan Guru"
-                className="mt-2 max-w-full h-20 border border-gray-200 rounded-lg"
-              />
+              <>
+                <img
+                  src={ttdGuru}
+                  alt="Tanda Tangan Guru"
+                  className="mt-2 max-w-full h-20 border border-gray-200 rounded-lg"
+                />
+                <button
+                  onClick={() => {
+                    if (confirm("Hapus tanda tangan Guru yang tersimpan?")) {
+                      setTtdGuru("");
+                    }
+                  }}
+                  disabled={isSaving}
+                  className={`mt-2 px-4 py-1 bg-red-500 hover:bg-red-600 text-white rounded-lg text-sm ${
+                    isSaving ? "opacity-50 cursor-not-allowed" : ""
+                  }`}
+                >
+                  🗑️ Hapus TTD Tersimpan
+                </button>
+              </>
             )}
           </div>
         </div>
@@ -451,6 +556,7 @@ const StudentDataTab: React.FC<{
   const [nisn, setNisn] = useState("");
   const [nama, setNama] = useState("");
   const [kelas, setKelas] = useState("");
+  const [jenisKelamin, setJenisKelamin] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedKelas, setSelectedKelas] = useState<string>("Semua");
 
@@ -459,15 +565,19 @@ const StudentDataTab: React.FC<{
   const [bulkNisn, setBulkNisn] = useState("");
   const [bulkNama, setBulkNama] = useState("");
   const [bulkKelas, setBulkKelas] = useState("");
+  const [bulkJenisKelamin, setBulkJenisKelamin] = useState("");
 
   // State untuk loading
   const [isSaving, setIsSaving] = useState(false);
   const [isBulkSaving, setIsBulkSaving] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleSubmit = () => {
-    if (!nisn || !nama || !kelas) {
+    if (!nisn || !nama || !kelas || !jenisKelamin) {
+      // TAMBAHKAN || !jenisKelamin
       alert("⚠️ Semua field wajib diisi!");
       return;
     }
@@ -483,6 +593,7 @@ const StudentDataTab: React.FC<{
         nisn,
         nama,
         kelas,
+        jenisKelamin, // TAMBAHKAN BARIS INI
       }),
     })
       .then(() => {
@@ -490,6 +601,7 @@ const StudentDataTab: React.FC<{
         setNisn("");
         setNama("");
         setKelas("");
+        setJenisKelamin(""); // TAMBAHKAN BARIS INI
         onRefresh();
         setIsSaving(false);
       })
@@ -500,13 +612,17 @@ const StudentDataTab: React.FC<{
   };
 
   const handleBulkImport = () => {
-    // Validasi input
-    if (!bulkNisn.trim() || !bulkNama.trim() || !bulkKelas.trim()) {
+    if (
+      !bulkNisn.trim() ||
+      !bulkNama.trim() ||
+      !bulkKelas.trim() ||
+      !bulkJenisKelamin.trim()
+    ) {
+      // TAMBAHKAN || !bulkJenisKelamin.trim()
       alert("⚠️ Semua field data massal wajib diisi!");
       return;
     }
 
-    // Parse data dari textarea
     const nisnLines = bulkNisn
       .trim()
       .split("\n")
@@ -519,13 +635,19 @@ const StudentDataTab: React.FC<{
       .trim()
       .split("\n")
       .filter((line) => line.trim());
+    const jenisKelaminLines = bulkJenisKelamin
+      .trim()
+      .split("\n")
+      .filter((line) => line.trim()); // TAMBAHKAN BARIS INI
 
-    // Validasi jumlah baris harus sama
     if (
       nisnLines.length !== namaLines.length ||
-      namaLines.length !== kelasLines.length
+      namaLines.length !== kelasLines.length ||
+      kelasLines.length !== jenisKelaminLines.length // TAMBAHKAN BARIS INI
     ) {
-      alert("⚠️ Jumlah baris data NISN, Nama, dan Kelas harus sama!");
+      alert(
+        "⚠️ Jumlah baris data NISN, Nama, Kelas, dan Jenis Kelamin harus sama!"
+      ); // UPDATE PESAN
       return;
     }
 
@@ -546,6 +668,7 @@ const StudentDataTab: React.FC<{
       nisn: nisn.trim(),
       nama: namaLines[index].trim(),
       kelas: kelasLines[index].trim(),
+      jenisKelamin: jenisKelaminLines[index].trim(), // TAMBAHKAN BARIS INI
     }));
 
     // Kirim dalam satu request
@@ -569,6 +692,7 @@ const StudentDataTab: React.FC<{
         setBulkNisn("");
         setBulkNama("");
         setBulkKelas("");
+        setBulkJenisKelamin("");
         setShowBulkImport(false);
         onRefresh();
         setIsBulkSaving(false);
@@ -586,8 +710,20 @@ const StudentDataTab: React.FC<{
     const newNisn = prompt("Edit NISN:", student.nisn ?? undefined);
     const newName = prompt("Edit nama siswa:", student.name ?? undefined);
     const newClass = prompt("Edit kelas siswa:", student.kelas ?? undefined);
+    const jenisKelaminInput = prompt(
+      "Edit jenis kelamin (ketik L atau P):",
+      student.jenisKelamin ?? undefined
+    );
 
-    if (newNisn && newName && newClass) {
+    // Validasi input
+    const newJenisKelamin = jenisKelaminInput?.toUpperCase().trim();
+    if (newJenisKelamin && !["L", "P"].includes(newJenisKelamin)) {
+      alert("❌ Jenis kelamin harus L atau P!");
+      return;
+    }
+
+    if (newNisn && newName && newClass && newJenisKelamin) {
+      // TAMBAHKAN && newJenisKelamin
       setIsEditing(true);
 
       fetch(endpoint, {
@@ -600,6 +736,7 @@ const StudentDataTab: React.FC<{
           nisnBaru: newNisn,
           nama: newName,
           kelas: newClass,
+          jenisKelamin: newJenisKelamin, // TAMBAHKAN BARIS INI
         }),
       })
         .then(() => {
@@ -640,6 +777,206 @@ const StudentDataTab: React.FC<{
           alert("❌ Gagal menghapus siswa");
           setIsDeleting(false);
         });
+    }
+  };
+
+  const handleDownloadTemplate = () => {
+    // Buat workbook baru
+    const wb = XLSX.utils.book_new();
+
+    // Buat data untuk template (header + contoh data)
+    const templateData = [
+      ["nisn", "nama", "kelas", "jenis kelamin"], // Header
+      ["1122", "Andi", "6", "L"], // Contoh 1
+      ["3171424040", "ALIKA BINTANG SYAM", "6", "L"], // Contoh 2
+      ["89010", "SENI", "5", "L"], // Contoh 3
+    ];
+
+    // Buat worksheet dari data
+    const ws = XLSX.utils.aoa_to_sheet(templateData);
+
+    // Atur lebar kolom agar lebih rapi
+    ws["!cols"] = [
+      { wch: 15 }, // NISN
+      { wch: 30 }, // Nama
+      { wch: 10 }, // Kelas
+      { wch: 15 }, // Jenis Kelamin
+    ];
+
+    // ✅ TAMBAHAN: Set format kolom NISN menjadi TEXT
+    // Format sel A2 sampai A1000 (kolom NISN) sebagai text
+    for (let row = 2; row <= 1000; row++) {
+      const cellRef = `A${row}`;
+      if (!ws[cellRef]) ws[cellRef] = { t: "s", v: "" }; // Buat sel baru jika belum ada
+      ws[cellRef].z = "@"; // @ adalah kode format untuk text di Excel
+    }
+
+    // Style untuk header (baris pertama)
+    const headerStyle = {
+      font: { bold: true, color: { rgb: "FFFFFF" } },
+      fill: { fgColor: { rgb: "4472C4" } }, // Biru
+      alignment: { horizontal: "center", vertical: "center" },
+    };
+
+    // Apply style ke header
+    ["A1", "B1", "C1", "D1"].forEach((cell) => {
+      if (ws[cell]) {
+        ws[cell].s = headerStyle;
+      }
+    });
+
+    // Tambahkan worksheet ke workbook
+    XLSX.utils.book_append_sheet(wb, ws, "Template Data Siswa");
+
+    // Generate file dan download
+    const date = new Date().toISOString().split("T")[0]; // Format: YYYY-MM-DD
+    const fileName = `Template_Data_Siswa_${date}.xlsx`;
+    XLSX.writeFile(wb, fileName);
+
+    alert(
+      "✅ Template Excel berhasil diunduh!\n\nKolom NISN sudah diformat sebagai TEXT.\nSilakan isi data siswa lalu upload kembali."
+    );
+  };
+
+  const handleImportExcel = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = async (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // Validasi tipe file
+    if (!file.name.endsWith(".xlsx") && !file.name.endsWith(".xls")) {
+      alert("⚠️ File harus berformat Excel (.xlsx atau .xls)");
+      return;
+    }
+
+    setIsImporting(true);
+
+    try {
+      const data = await file.arrayBuffer();
+      const workbook = XLSX.read(data);
+      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+      const jsonData = XLSX.utils.sheet_to_json(worksheet, {
+        header: 1,
+      }) as any[][];
+
+      // Validasi header
+      const headers = jsonData[0];
+      const expectedHeaders = ["nisn", "nama", "kelas", "jenis kelamin"];
+
+      const headersMatch = expectedHeaders.every(
+        (expected, index) =>
+          headers[index]?.toString().toLowerCase().trim() === expected
+      );
+
+      if (!headersMatch) {
+        alert(
+          "⚠️ Format Excel tidak sesuai!\n\nHeader harus: nisn, nama, kelas, jenis kelamin"
+        );
+        setIsImporting(false);
+        return;
+      }
+
+      // Parse data (skip header)
+      const studentsData: Array<{
+        nisn: string;
+        nama: string;
+        kelas: string;
+        jenisKelamin: string;
+      }> = [];
+
+      for (let i = 1; i < jsonData.length; i++) {
+        const row = jsonData[i];
+
+        // Skip baris kosong
+        if (!row[0] && !row[1] && !row[2] && !row[3]) continue;
+
+        const nisn = String(row[0] || "").trim();
+        const nama = String(row[1] || "").trim();
+        const kelas = String(row[2] || "").trim();
+        let jenisKelamin = String(row[3] || "")
+          .trim()
+          .toUpperCase();
+
+        // Validasi data
+        if (!nisn || !nama || !kelas || !jenisKelamin) {
+          alert(
+            `⚠️ Data tidak lengkap pada baris ${
+              i + 1
+            }!\n\nSemua kolom wajib diisi.`
+          );
+          setIsImporting(false);
+          return;
+        }
+
+        // Normalisasi jenis kelamin
+        if (jenisKelamin === "LAKI-LAKI" || jenisKelamin === "L") {
+          jenisKelamin = "L";
+        } else if (jenisKelamin === "PEREMPUAN" || jenisKelamin === "P") {
+          jenisKelamin = "P";
+        } else {
+          alert(
+            `⚠️ Jenis kelamin tidak valid pada baris ${
+              i + 1
+            }!\n\nHarus L atau P (Laki-laki atau Perempuan).`
+          );
+          setIsImporting(false);
+          return;
+        }
+
+        studentsData.push({
+          nisn,
+          nama,
+          kelas,
+          jenisKelamin,
+        });
+      }
+
+      if (studentsData.length === 0) {
+        alert("⚠️ Tidak ada data siswa yang valid dalam file Excel!");
+        setIsImporting(false);
+        return;
+      }
+
+      // Konfirmasi sebelum import
+      if (
+        !confirm(
+          `Akan mengimport ${studentsData.length} siswa dari Excel. Lanjutkan?`
+        )
+      ) {
+        setIsImporting(false);
+        return;
+      }
+
+      // Kirim data ke server
+      await fetch(endpoint, {
+        method: "POST",
+        mode: "no-cors",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "bulk_siswa",
+          students: studentsData,
+        }),
+      });
+
+      alert(`✅ Berhasil mengimport ${studentsData.length} siswa dari Excel!`);
+      onRefresh();
+
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    } catch (error) {
+      console.error("Error importing Excel:", error);
+      alert(
+        "❌ Terjadi kesalahan saat mengimport file Excel.\n\nPastikan format file sesuai dan coba lagi."
+      );
+    } finally {
+      setIsImporting(false);
     }
   };
 
@@ -690,13 +1027,23 @@ const StudentDataTab: React.FC<{
             className="w-full border border-gray-300 px-4 py-2 rounded-lg"
             disabled={isSaving}
           />
+          <select
+            value={jenisKelamin}
+            onChange={(e) => setJenisKelamin(e.target.value)}
+            className="w-full border border-gray-300 px-4 py-2 rounded-lg"
+            disabled={isSaving}
+          >
+            <option value="">Pilih Jenis Kelamin</option>
+            <option value="L">L - Laki-laki</option>
+            <option value="P">P - Perempuan</option>
+          </select>
         </div>
-        <div className="flex justify-center gap-4">
+        <div className="grid grid-cols-2 gap-3">
           <button
             onClick={handleSubmit}
-            disabled={isSaving}
-            className={`px-6 py-2 rounded-lg font-medium transition-colors ${
-              isSaving
+            disabled={isSaving || isImporting}
+            className={`px-4 py-3 rounded-lg font-medium transition-colors text-sm ${
+              isSaving || isImporting
                 ? "bg-blue-400 cursor-not-allowed"
                 : "bg-blue-600 hover:bg-blue-700"
             } text-white`}
@@ -705,15 +1052,107 @@ const StudentDataTab: React.FC<{
           </button>
           <button
             onClick={() => setShowBulkImport(!showBulkImport)}
-            disabled={isSaving}
-            className={`px-6 py-2 rounded-lg font-medium transition-colors ${
-              isSaving
+            disabled={isSaving || isImporting}
+            className={`px-4 py-3 rounded-lg font-medium transition-colors text-sm ${
+              isSaving || isImporting
                 ? "bg-green-400 cursor-not-allowed"
                 : "bg-green-600 hover:bg-green-700"
             } text-white`}
           >
-            📋 Tambah Data Massal
+            📋 Data Massal
           </button>
+          <button
+            onClick={handleDownloadTemplate}
+            disabled={isSaving || isImporting}
+            style={{
+              backgroundColor: isSaving || isImporting ? "#60a5fa" : "#0ea5e9",
+              color: "white",
+            }}
+            className={`px-4 py-3 rounded-lg font-medium transition-colors text-sm ${
+              isSaving || isImporting
+                ? "cursor-not-allowed"
+                : "hover:brightness-110"
+            }`}
+          >
+            📄 Download Template
+          </button>
+          <button
+            onClick={handleImportExcel}
+            disabled={isSaving || isImporting}
+            className={`px-4 py-3 rounded-lg font-medium transition-colors text-sm ${
+              isSaving || isImporting
+                ? "bg-purple-400 cursor-not-allowed"
+                : "bg-purple-600 hover:bg-purple-700"
+            } text-white`}
+          >
+            {isImporting ? "⏳ Import..." : "📥 Import Excel"}
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".xlsx,.xls"
+            onChange={handleFileChange}
+            className="hidden"
+          />
+        </div>
+      </div>
+
+      <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 mb-6">
+        <h3 className="text-lg font-semibold text-purple-700 mb-3">
+          📋 Cara Import Data dari Excel
+        </h3>
+        <div className="space-y-3 text-sm text-purple-600">
+          {/* ⬇️ TAMBAHKAN LANGKAH-LANGKAH ⬇️ */}
+          <div className="bg-orange-50 border border-orange-300 rounded-lg p-3">
+            <p className="font-bold text-orange-700 mb-2">🎯 Langkah Mudah:</p>
+            <ol className="list-decimal list-inside space-y-1 text-orange-600">
+              <li>
+                Klik tombol <strong>"📄 Download Template"</strong> untuk unduh
+                template Excel
+              </li>
+              <li>
+                Buka file template, <strong>hapus 3 baris contoh data</strong>
+              </li>
+              <li>Isi data siswa sesuai format (jangan ubah header!)</li>
+              <li>Simpan file Excel</li>
+              <li>
+                Klik tombol <strong>"📥 Import dari Excel"</strong> dan pilih
+                file yang sudah diisi
+              </li>
+            </ol>
+          </div>
+
+          <p className="font-semibold">📄 Format Header Template:</p>
+          <div className="bg-white border border-purple-200 rounded p-2 font-mono text-xs">
+            nisn | nama | kelas | jenis kelamin
+          </div>
+
+          <p className="mt-3">
+            <strong>Contoh Data (sudah ada di template):</strong>
+          </p>
+          <div className="bg-white border border-purple-200 rounded p-2 font-mono text-xs">
+            <div>1122 | Andi | 6 | L</div>
+            <div>3171424040 | ALIKA BINTANG SYAM | 6 | L</div>
+            <div>89010 | SENI | 5 | L</div>
+          </div>
+
+          <p className="mt-3">
+            <strong>⚠️ Catatan Penting:</strong>
+          </p>
+          <ul className="list-disc list-inside space-y-1">
+            <li>
+              <strong>Jangan ubah atau hapus header</strong> (baris 1)
+            </li>
+            <li>Hapus 3 baris contoh data sebelum mengisi data asli</li>
+            <li>
+              Jenis kelamin harus: <strong>L</strong> atau <strong>P</strong>
+            </li>
+            <li>Semua kolom wajib diisi</li>
+            <li>
+              Format file harus: <strong>.xlsx</strong> atau{" "}
+              <strong>.xls</strong>
+            </li>
+          </ul>
         </div>
       </div>
 
@@ -774,6 +1213,19 @@ const StudentDataTab: React.FC<{
                 placeholder="3&#10;4&#10;5"
                 value={bulkKelas}
                 onChange={(e) => setBulkKelas(e.target.value)}
+                className="w-full border border-gray-300 px-4 py-2 rounded-lg h-32 resize-none"
+                rows={6}
+                disabled={isBulkSaving}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Jenis Kelamin (L/P, satu per baris)
+              </label>
+              <textarea
+                placeholder="L&#10;P&#10;L"
+                value={bulkJenisKelamin}
+                onChange={(e) => setBulkJenisKelamin(e.target.value)}
                 className="w-full border border-gray-300 px-4 py-2 rounded-lg h-32 resize-none"
                 rows={6}
                 disabled={isBulkSaving}
@@ -863,7 +1315,9 @@ const StudentDataTab: React.FC<{
                 <div>
                   <p className="font-medium text-gray-800">{s.name || "N/A"}</p>
                   <p className="text-sm text-gray-600">
-                    NISN: {s.nisn || "N/A"} | Kelas: {s.kelas || "N/A"}
+                    NISN: {s.nisn || "N/A"} | Kelas: {s.kelas || "N/A"} | Jenis
+                    Kelamin: {s.jenisKelamin || "N/A"}{" "}
+                    {/* TAMBAHKAN | Jenis Kelamin: {s.jenisKelamin || "N/A"} */}
                   </p>
                 </div>
                 <div className="flex gap-2">
@@ -919,6 +1373,12 @@ const AttendanceTab: React.FC<{
   const [selectedKelas, setSelectedKelas] = useState<string>("Semua");
   const [showDebugInfo, setShowDebugInfo] = useState<boolean>(false);
   const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [tanggalMerahList, setTanggalMerahList] = useState<TanggalMerah[]>([]);
+  const [loadingTanggalMerah, setLoadingTanggalMerah] =
+    useState<boolean>(false);
+  const [jadwalMengajar, setJadwalMengajar] = useState<JadwalMengajar[]>([]);
+  const [loadingJadwal, setLoadingJadwal] = useState<boolean>(false);
+  const [schoolData, setSchoolData] = useState<SchoolData | null>(null);
 
   // NEW: State untuk menyimpan ID siswa yang sudah memiliki data existing (granular per siswa)
   const [existingStudentIds, setExistingStudentIds] = useState<Set<string>>(
@@ -1105,6 +1565,65 @@ const AttendanceTab: React.FC<{
     }
   }, [date, students, attendance]);
 
+  useEffect(() => {
+    fetch(`${endpoint}?action=schoolData`)
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+        return res.json();
+      })
+      .then((data) => {
+        if (data.success && data.data && data.data.length > 0) {
+          setSchoolData(data.data[0]);
+        } else {
+          setSchoolData(null);
+        }
+      })
+      .catch((error) => {
+        console.error("Error fetching school data:", error);
+      });
+  }, []);
+
+  useEffect(() => {
+    fetchTanggalMerah();
+    fetchJadwalMengajar();
+  }, []);
+
+  const fetchTanggalMerah = async () => {
+    setLoadingTanggalMerah(true);
+    try {
+      const res = await fetch(`${endpoint}?action=tanggalMerah`);
+      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+      const data = await res.json();
+      if (data.success) {
+        setTanggalMerahList(data.data || []);
+      }
+    } catch (error) {
+      console.error("Error fetch tanggal merah:", error);
+    } finally {
+      setLoadingTanggalMerah(false);
+    }
+  };
+
+  const fetchJadwalMengajar = async () => {
+    setLoadingJadwal(true);
+    try {
+      const res = await fetch(`${endpoint}?action=jadwalMengajar`);
+      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+      const data = await res.json();
+      if (data.success) {
+        console.log("Jadwal mengajar loaded:", data.data);
+        setJadwalMengajar(data.data || []);
+      } else {
+        console.error("Gagal memuat jadwal mengajar:", data.message);
+        setJadwalMengajar([]);
+      }
+    } catch (error) {
+      console.error("Error fetch jadwal mengajar:", error);
+    } finally {
+      setLoadingJadwal(false);
+    }
+  };
+
   const setStatus = (sid: string, status: AttendanceStatus) => {
     // NEW: Jika siswa ini sudah memiliki data existing, jangan izinkan perubahan
     if (existingStudentIds.has(sid)) {
@@ -1179,7 +1698,145 @@ const AttendanceTab: React.FC<{
     return summary;
   };
 
+  // TAMBAHKAN fungsi-fungsi helper ini sebelum return statement:
+  const isSunday = (dateStr: string): boolean => {
+    const [year, month, day] = dateStr.split("-");
+    const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+    return date.getDay() === 0;
+  };
+
+  const isInDateRange = (
+    currentDate: string,
+    startDate: string,
+    endDate?: string
+  ): boolean => {
+    const formatToComparable = (dateStr: string) => {
+      const [d, m, y] = dateStr.split("/");
+      return new Date(parseInt(y), parseInt(m) - 1, parseInt(d));
+    };
+
+    const [year, month, day] = currentDate.split("-");
+    const current = new Date(
+      parseInt(year),
+      parseInt(month) - 1,
+      parseInt(day)
+    );
+    const start = formatToComparable(startDate);
+
+    if (!endDate) {
+      return current.getTime() === start.getTime();
+    }
+
+    const end = formatToComparable(endDate);
+    return current >= start && current <= end;
+  };
+
+  const getTanggalMerahInfo = (dateStr: string): TanggalMerah | null => {
+    const formattedDate = formatDateDDMMYYYY(dateStr);
+
+    for (const tm of tanggalMerahList) {
+      if (isInDateRange(dateStr, tm.tanggal, tm.tanggalAkhir)) {
+        return tm;
+      }
+    }
+    return null;
+  };
+
+  const isLiburSemester = (dateStr: string): boolean => {
+    const info = getTanggalMerahInfo(dateStr);
+    if (!info) return false;
+
+    const desc = info.deskripsi.toLowerCase();
+    return (
+      desc.includes("libur akhir semester") || desc.includes("libur semester")
+    );
+  };
+
+  const isTanggalMerah = (dateStr: string): boolean => {
+    const info = getTanggalMerahInfo(dateStr);
+    if (!info) return false;
+
+    const desc = info.deskripsi.toLowerCase();
+    return !(
+      desc.includes("libur akhir semester") || desc.includes("libur semester")
+    );
+  };
+
+  const isBukanJadwalMengajar = (dateStr: string): boolean => {
+    // Jika guru kelas, semua hari adalah jadwal mengajar
+    if (schoolData?.statusGuru === "Guru Kelas") {
+      return false;
+    }
+
+    // Jika "Semua" dipilih, tidak bisa tentukan jadwal spesifik
+    if (selectedKelas === "Semua") {
+      return false;
+    }
+
+    // Cari jadwal untuk kelas yang dipilih
+    const jadwal = jadwalMengajar.find((j) => j.kelas === selectedKelas);
+
+    if (!jadwal) {
+      // Jika tidak ada jadwal untuk kelas ini, anggap semua hari bukan jadwal
+      return true;
+    }
+
+    // Dapatkan nama hari dari tanggal
+    const [year, month, day] = dateStr.split("-");
+    const currentDate = new Date(
+      parseInt(year),
+      parseInt(month) - 1,
+      parseInt(day)
+    );
+    const dayNames = [
+      "Minggu",
+      "Senin",
+      "Selasa",
+      "Rabu",
+      "Kamis",
+      "Jumat",
+      "Sabtu",
+    ];
+    const dayName = dayNames[currentDate.getDay()];
+
+    // Split hari dari jadwal dan trim setiap item
+    const hariJadwal = jadwal.hari
+      .split(",")
+      .map((h) => h.trim())
+      .filter((h) => h.length > 0);
+
+    // Return true jika BUKAN hari jadwal
+    return !hariJadwal.includes(dayName);
+  };
+
   const attendanceSummary = getAttendanceSummary();
+
+  if (students.length === 0) {
+    return (
+      <div className="max-w-4xl mx-auto" style={{ paddingBottom: "70px" }}>
+        <div className="bg-white p-6 rounded-lg shadow-md">
+          <h2 className="text-2xl font-bold text-center text-blue-700 mb-6">
+            📋 Absensi Siswa
+          </h2>
+          <div className="text-center py-12">
+            <div className="bg-yellow-50 border-2 border-yellow-200 rounded-lg p-8 max-w-md mx-auto">
+              <div className="text-6xl mb-4">⚠️</div>
+              <h3 className="text-2xl font-bold text-yellow-700 mb-2">
+                Data Siswa Kosong
+              </h3>
+              <p className="text-yellow-600 mb-4">
+                Anda belum mengisi Data Siswa.
+              </p>
+              <p className="text-sm text-yellow-500">
+                Silakan tambahkan data siswa terlebih dahulu di menu "Data
+                Siswa".
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // NEW: Cek apakah semua siswa sudah memiliki data existing
   const allStudentsHaveData =
@@ -1380,6 +2037,71 @@ const AttendanceTab: React.FC<{
               Pilih kelas lain atau ubah filter ke "Semua"
             </p>
           </div>
+        ) : isSunday(date) ? (
+          // TAMPILAN UNTUK HARI MINGGU
+          <div className="text-center py-12">
+            <div className="bg-red-50 border-2 border-red-200 rounded-lg p-8 max-w-md mx-auto">
+              <div className="text-6xl mb-4">🌅</div>
+              <h3 className="text-2xl font-bold text-red-700 mb-2">
+                Hari Minggu
+              </h3>
+              <p className="text-red-600">
+                Tanggal {formatDateDDMMYYYY(date)} adalah hari Minggu.
+              </p>
+              <p className="text-sm text-red-500 mt-2">
+                Tidak ada kegiatan belajar mengajar.
+              </p>
+            </div>
+          </div>
+        ) : isLiburSemester(date) ? (
+          // TAMPILAN UNTUK LIBUR SEMESTER
+          <div className="text-center py-12">
+            <div className="bg-green-50 border-2 border-green-200 rounded-lg p-8 max-w-md mx-auto">
+              <div className="text-6xl mb-4">🏖️</div>
+              <h3 className="text-2xl font-bold text-green-700 mb-2">
+                Libur Semester
+              </h3>
+              <p className="text-green-600">
+                {getTanggalMerahInfo(date)?.deskripsi}
+              </p>
+              <p className="text-sm text-green-500 mt-2">
+                Tanggal: {formatDateDDMMYYYY(date)}
+              </p>
+            </div>
+          </div>
+        ) : isTanggalMerah(date) ? (
+          // TAMPILAN UNTUK TANGGAL MERAH/LIBUR NASIONAL
+          <div className="text-center py-12">
+            <div className="bg-yellow-50 border-2 border-yellow-200 rounded-lg p-8 max-w-md mx-auto">
+              <div className="text-6xl mb-4">🎉</div>
+              <h3 className="text-2xl font-bold text-yellow-700 mb-2">
+                Hari Libur Nasional
+              </h3>
+              <p className="text-yellow-600 font-semibold text-lg">
+                {getTanggalMerahInfo(date)?.deskripsi}
+              </p>
+              <p className="text-sm text-yellow-500 mt-2">
+                Tanggal: {formatDateDDMMYYYY(date)}
+              </p>
+            </div>
+          </div>
+        ) : isBukanJadwalMengajar(date) ? (
+          // TAMPILAN UNTUK BUKAN JADWAL MENGAJAR
+          <div className="text-center py-12">
+            <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-8 max-w-md mx-auto">
+              <div className="text-6xl mb-4">📚</div>
+              <h3 className="text-2xl font-bold text-blue-700 mb-2">
+                Bukan Jadwal Mengajar
+              </h3>
+              <p className="text-blue-600">
+                Hari ini ({formatDateDDMMYYYY(date)}) bukan jadwal mengajar Anda
+                untuk kelas {selectedKelas}.
+              </p>
+              <p className="text-sm text-blue-500 mt-2">
+                Silakan pilih tanggal atau kelas lain.
+              </p>
+            </div>
+          </div>
         ) : (
           <>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
@@ -1409,14 +2131,65 @@ const AttendanceTab: React.FC<{
               </div>
             </div>
 
+            {isLoadingExistingData && (
+              <div className="mb-4 bg-blue-50 border border-blue-200 rounded-lg p-4 text-center">
+                <div className="flex items-center justify-center gap-2">
+                  <svg
+                    className="animate-spin h-5 w-5 text-blue-600"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    ></circle>
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    ></path>
+                  </svg>
+                  <span className="text-blue-700 font-semibold">
+                    ⏳ Mohon tunggu, sedang memuat data absensi...
+                  </span>
+                </div>
+              </div>
+            )}
+
             <div className="space-y-4 mb-6 overflow-x-auto">
               <table className="w-full border-collapse">
+                <thead>
+                  <tr className="bg-gray-100">
+                    <th className="border border-gray-200 px-2 py-1 text-center text-sm font-semibold text-gray-700">
+                      No.
+                    </th>
+                    <th className="border border-gray-200 px-2 py-1 text-left text-sm font-semibold text-gray-700">
+                      Nama Siswa
+                    </th>
+                    <th className="border border-gray-200 px-2 py-1 text-center text-sm font-semibold text-gray-700">
+                      Status
+                    </th>
+                  </tr>
+                </thead>
                 <tbody>
-                  {filteredStudents.map((s) => {
+                  {filteredStudents.map((s, index) => {
                     const isExisting = existingStudentIds.has(s.id);
                     return (
                       <tr key={s.id} className="border-b border-gray-200">
-                        <td style={{ width: "6cm" }} className="p-2">
+                        <td
+                          style={{ width: "1cm" }}
+                          className="p-2 text-center"
+                        >
+                          <span className="text-sm font-medium text-gray-800">
+                            {index + 1}
+                          </span>
+                        </td>
+                        <td style={{ width: "5.5cm" }} className="p-2">
                           <p className="text-base font-semibold text-gray-800">
                             {s.name || "N/A"}
                           </p>
@@ -1433,13 +2206,15 @@ const AttendanceTab: React.FC<{
                                   onClick={() => setStatus(s.id, status)}
                                   style={{ width: "1cm" }}
                                   className={`px-1 py-0.5 rounded-lg text-xs font-medium transition-colors ${
-                                    attendance[date]?.[s.id] === status
+                                    isLoadingExistingData
+                                      ? "bg-gray-300 text-gray-400 cursor-not-allowed opacity-50"
+                                      : attendance[date]?.[s.id] === status
                                       ? `${statusColor[status]} text-white`
                                       : isExisting
-                                      ? "bg-gray-200 text-gray-500 cursor-not-allowed" // Disabled style jika existing
+                                      ? "bg-gray-200 text-gray-500 cursor-not-allowed"
                                       : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-100"
                                   }`}
-                                  disabled={isExisting} // NEW: Disable per siswa jika existing
+                                  disabled={isExisting || isLoadingExistingData}
                                 >
                                   {status}
                                 </button>
@@ -1467,7 +2242,7 @@ const AttendanceTab: React.FC<{
               >
                 {isSaving
                   ? "⏳ Menyimpan..."
-                  : "💾 Simpan Absensi Siswa Baru " +
+                  : "💾 Simpan Absensi Siswa " +
                     (selectedKelas !== "Semua"
                       ? `Kelas ${selectedKelas}`
                       : "Semua Kelas")}
@@ -1487,16 +2262,10 @@ const AttendanceTab: React.FC<{
 const MonthlyRecapTab: React.FC<{
   onRefresh: () => void;
   uniqueClasses: string[];
-}> = ({ onRefresh, uniqueClasses }) => {
+  students: Student[];
+}> = ({ onRefresh, uniqueClasses, students }) => {
   const [recapData, setRecapData] = useState<MonthlyRecap[]>([]);
   const [selectedKelas, setSelectedKelas] = useState<string>("Semua");
-  const [selectedBulan, setSelectedBulan] = useState<string>("Oktober");
-  const [selectedDate, setSelectedDate] = useState<string>(
-    new Date().toISOString().split("T")[0]
-  );
-  const [placeName, setPlaceName] = useState<string>("Makassar");
-  const [loading, setLoading] = useState<boolean>(true);
-  const [schoolData, setSchoolData] = useState<SchoolData | null>(null);
 
   const months = [
     "Januari",
@@ -1512,6 +2281,19 @@ const MonthlyRecapTab: React.FC<{
     "November",
     "Desember",
   ] as const;
+
+  // Dapatkan bulan berjalan secara otomatis
+  const getCurrentMonth = () => {
+    const currentMonthIndex = new Date().getMonth(); // 0-11
+    return months[currentMonthIndex];
+  };
+
+  const [selectedBulan, setSelectedBulan] = useState<string>(getCurrentMonth());
+  const [selectedDate, setSelectedDate] = useState<string>(
+    new Date().toISOString().split("T")[0]
+  );
+  const [loading, setLoading] = useState<boolean>(true);
+  const [schoolData, setSchoolData] = useState<SchoolData | null>(null);
 
   useEffect(() => {
     setLoading(true);
@@ -1594,6 +2376,7 @@ const MonthlyRecapTab: React.FC<{
 
   const downloadExcel = () => {
     const headers = [
+      "No.",
       "Nama",
       "Kelas",
       "Hadir",
@@ -1604,7 +2387,8 @@ const MonthlyRecapTab: React.FC<{
     ];
     const data = [
       headers,
-      ...filteredRecapData.map((item) => [
+      ...filteredRecapData.map((item, index) => [
+        index + 1, // Nomor urut
         item.nama || "N/A",
         item.kelas || "N/A",
         item.hadir || 0,
@@ -1614,6 +2398,7 @@ const MonthlyRecapTab: React.FC<{
         item.persenHadir !== undefined ? `${item.persenHadir}%` : "N/A",
       ]),
       [
+        "",
         "TOTAL",
         "",
         statusSummary.Hadir,
@@ -1623,6 +2408,7 @@ const MonthlyRecapTab: React.FC<{
         "",
       ],
       [
+        "",
         "PERSEN",
         "",
         `${(
@@ -1662,7 +2448,16 @@ const MonthlyRecapTab: React.FC<{
     ];
 
     const ws = XLSX.utils.aoa_to_sheet(data);
-    ws["!cols"] = headers.map(() => ({ wch: 15 }));
+    ws["!cols"] = [
+      { wch: 5 }, // Lebar kolom No. (sempit)
+      { wch: 25 }, // Nama
+      { wch: 10 }, // Kelas
+      { wch: 10 }, // Hadir
+      { wch: 10 }, // Alpha
+      { wch: 10 }, // Izin
+      { wch: 10 }, // Sakit
+      { wch: 10 }, // % Hadir
+    ];
     const headerStyle = {
       font: { bold: true },
       fill: { fgColor: { rgb: "FFFF00" } },
@@ -1683,12 +2478,12 @@ const MonthlyRecapTab: React.FC<{
       ws[cellAddress] = { ...ws[cellAddress], s: headerStyle };
     });
     const totalRow = filteredRecapData.length + 1;
-    ["A", "B", "C", "D", "E", "F", "G"].forEach((col, idx) => {
+    ["A", "B", "C", "D", "E", "F", "G", "H"].forEach((col, idx) => {
       const cellAddress = `${col}${totalRow}`;
       ws[cellAddress] = { ...ws[cellAddress], s: totalStyle };
     });
     const percentRow = filteredRecapData.length + 2;
-    ["A", "B", "C", "D", "E", "F", "G"].forEach((col, idx) => {
+    ["A", "B", "C", "D", "E", "F", "G", "H"].forEach((col, idx) => {
       const cellAddress = `${col}${percentRow}`;
       ws[cellAddress] = { ...ws[cellAddress], s: percentStyle };
     });
@@ -1711,25 +2506,33 @@ const MonthlyRecapTab: React.FC<{
     XLSX.writeFile(wb, fileName);
   };
 
-  const downloadPDF = () => {
+  const downloadPDF = async () => {
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.getWidth();
     const margin = 14;
     const lineSpacing = 5;
     let currentY = margin;
 
-    // Set font to Times for consistency with typical formal documents
     doc.setFont("Times", "roman");
 
-    // Title
-    const title = `REKAP ABSENSI SISWA KELAS ${selectedKelas} ${selectedBulan.toUpperCase()} 2024`;
-    doc.setFontSize(14);
+    // Title - Format sama dengan Daftar Hadir
+    const namaSekolah = schoolData?.namaSekolah || "UPT SDN 13 BATANG";
+
+    // ✅ TAMBAHKAN: Ambil tahun dari selectedDate
+    const tahunDariTanggal = new Date(selectedDate).getFullYear();
+
+    // Judul dalam 1 baris - gunakan tahunDariTanggal
+    const title = `REKAP ABSENSI SISWA KELAS ${selectedKelas}  ${namaSekolah}  ${selectedBulan.toUpperCase()} ${tahunDariTanggal}`;
+
+    doc.setFontSize(12); // Ukuran font sama dengan daftar hadir
     doc.setFont("Times", "bold");
     doc.text(title, pageWidth / 2, currentY, { align: "center" });
+
     currentY += 10;
 
     // Table headers and data
     const headers = [
+      "No.",
       "Nama",
       "Kelas",
       "Hadir",
@@ -1738,7 +2541,8 @@ const MonthlyRecapTab: React.FC<{
       "Sakit",
       "% Hadir",
     ];
-    const body = filteredRecapData.map((item) => [
+    const body = filteredRecapData.map((item, index) => [
+      index + 1, // Nomor urut
       item.nama || "N/A",
       item.kelas || "N/A",
       item.hadir || 0,
@@ -1749,6 +2553,7 @@ const MonthlyRecapTab: React.FC<{
     ]);
 
     const totalRow = [
+      "",
       "TOTAL",
       "",
       statusSummary.Hadir,
@@ -1759,6 +2564,7 @@ const MonthlyRecapTab: React.FC<{
     ];
 
     const percentRow = [
+      "",
       "PERSEN",
       "",
       `${(
@@ -1808,17 +2614,106 @@ const MonthlyRecapTab: React.FC<{
       },
       alternateRowStyles: { fillColor: [240, 240, 240] },
       columnStyles: {
-        0: { cellWidth: 50 },
-        1: { cellWidth: 20 },
-        2: { cellWidth: 20 },
-        3: { cellWidth: 20 },
-        4: { cellWidth: 20 },
-        5: { cellWidth: 20 },
-        6: { cellWidth: 20 },
+        0: { cellWidth: 10 }, // No. (sempit)
+        1: { cellWidth: 50 }, // Nama
+        2: { cellWidth: 20 }, // Kelas
+        3: { cellWidth: 20 }, // Hadir
+        4: { cellWidth: 20 }, // Alpha
+        5: { cellWidth: 20 }, // Izin
+        6: { cellWidth: 20 }, // Sakit
+        7: { cellWidth: 20 }, // % Hadir
       },
     });
 
     // Update currentY after the table
+    currentY = (doc as any).lastAutoTable.finalY + 10;
+
+    // ✅ TAMBAHAN BARU: Tabel Informasi Jumlah Siswa
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const bottomMargin = 20;
+    const spaceNeededForStudentTable = 20;
+    const spaceNeededForSignatures = 60; // Ruang untuk tanda tangan
+
+    // ✅ CEK APAKAH TANDA TANGAN + TABEL SISWA MUAT DI HALAMAN INI
+    // Cek apakah ada cukup ruang untuk tabel jumlah siswa DAN tanda tangan
+    if (
+      currentY + spaceNeededForStudentTable + spaceNeededForSignatures >
+      pageHeight - bottomMargin
+    ) {
+      doc.addPage();
+      currentY = margin;
+    }
+
+    // Hitung jumlah siswa berdasarkan jenis kelamin
+    const genderSummary = filteredRecapData.reduce(
+      (acc, student) => {
+        // Ambil data siswa dari filteredRecapData untuk mendapatkan jenis kelamin
+        const studentData = students.find((s) => s.name === student.nama);
+        if (studentData) {
+          const jenisKelamin = String(studentData.jenisKelamin || "")
+            .trim()
+            .toUpperCase();
+          if (jenisKelamin === "L" || jenisKelamin === "LAKI-LAKI") {
+            acc.lakiLaki++;
+          } else if (jenisKelamin === "P" || jenisKelamin === "PEREMPUAN") {
+            acc.perempuan++;
+          }
+        }
+        return acc;
+      },
+      { lakiLaki: 0, perempuan: 0 }
+    );
+
+    const totalSiswa = genderSummary.lakiLaki + genderSummary.perempuan;
+
+    doc.setFontSize(10);
+    doc.setFont("Times", "bold");
+    doc.text("JUMLAH SISWA", margin, currentY, { align: "left" });
+    currentY += 3;
+
+    const tableWidth = (pageWidth - 2 * margin) * 0.4;
+
+    autoTable(doc, {
+      head: [["LAKI-LAKI", "PEREMPUAN", "TOTAL SISWA"]],
+      body: [
+        [
+          genderSummary.lakiLaki.toString(),
+          genderSummary.perempuan.toString(),
+          totalSiswa.toString(),
+        ],
+      ],
+      startY: currentY,
+      margin: { left: margin, right: pageWidth - margin - tableWidth },
+      tableWidth: tableWidth,
+      theme: "grid",
+      styles: {
+        font: "Times",
+        fontSize: 7,
+        cellPadding: 1,
+        halign: "center",
+        valign: "middle",
+        lineWidth: 0.5,
+      },
+      headStyles: {
+        fillColor: [255, 255, 255],
+        textColor: [0, 0, 0],
+        fontStyle: "bold",
+        lineWidth: 1,
+      },
+      bodyStyles: {
+        fillColor: [255, 255, 255],
+        textColor: [0, 0, 0],
+        fontStyle: "bold",
+        fontSize: 10,
+        lineWidth: 1,
+      },
+      columnStyles: {
+        0: { cellWidth: tableWidth / 3, fillColor: [255, 255, 255] },
+        1: { cellWidth: tableWidth / 3, fillColor: [255, 255, 255] },
+        2: { cellWidth: tableWidth / 3, fillColor: [255, 255, 255] },
+      },
+    });
+
     currentY = (doc as any).lastAutoTable.finalY + 10;
 
     // Add school data (Principal and Teacher details)
@@ -1832,7 +2727,9 @@ const MonthlyRecapTab: React.FC<{
         month: "long",
         year: "numeric",
       });
-      const placeDateText = `${placeName}, ${formattedDate}`;
+      const placeDateText = `${
+        schoolData.namaKota || "Makassar"
+      }, ${formattedDate}`;
       const rightColumnX = pageWidth - margin - 50; // Signature width is 50
       doc.text(placeDateText, rightColumnX + 25, currentY - 1, {
         align: "center",
@@ -1862,14 +2759,31 @@ const MonthlyRecapTab: React.FC<{
 
       // Principal signature and text
       if (schoolData.ttdKepsek) {
-        doc.addImage(
-          schoolData.ttdKepsek,
-          "PNG",
-          leftColumnX + 10,
-          currentY - 3,
-          signatureWidth,
-          signatureHeight
-        );
+        try {
+          const canvas = document.createElement("canvas");
+          canvas.width = 150; // Sesuaikan ukuran canvas (lebar lebih besar untuk tanda tangan panjang)
+          canvas.height = 50; // Sesuaikan ukuran canvas (tinggi cukup untuk garis tanda tangan)
+          const ctx = canvas.getContext("2d");
+          const v = await Canvg.from(ctx, schoolData.ttdKepsek); // schoolData.ttdKepsek adalah base64 SVG
+          v.start();
+          const pngData = canvas.toDataURL("image/png");
+          doc.addImage(
+            pngData,
+            "PNG",
+            leftColumnX + 10,
+            currentY - 3,
+            signatureWidth,
+            signatureHeight
+          ); // Sesuaikan posisi sesuai asli
+        } catch (error) {
+          console.error("Error rendering Kepsek signature:", error);
+          doc.setFontSize(10);
+          doc.text(
+            "Gagal render tanda tangan Kepala Sekolah.",
+            leftColumnX + 10,
+            currentY - 3 + 10
+          );
+        }
       }
 
       // Pisahkan "Kepala Sekolah" dengan posisi yang lebih tinggi
@@ -1916,20 +2830,42 @@ const MonthlyRecapTab: React.FC<{
 
       // Teacher signature and text
       if (schoolData.ttdGuru) {
-        doc.addImage(
-          schoolData.ttdGuru,
-          "PNG",
-          rightColumnX + 10,
-          currentY - 5,
-          signatureWidth,
-          signatureHeight
-        );
+        try {
+          const canvas = document.createElement("canvas");
+          canvas.width = 150; // Sesuaikan ukuran canvas
+          canvas.height = 50;
+          const ctx = canvas.getContext("2d");
+          const v = await Canvg.from(ctx, schoolData.ttdGuru); // schoolData.ttdGuru adalah base64 SVG
+          v.start();
+          const pngData = canvas.toDataURL("image/png");
+          doc.addImage(
+            pngData,
+            "PNG",
+            rightColumnX + 10,
+            currentY - 5,
+            signatureWidth,
+            signatureHeight
+          ); // Sesuaikan posisi sesuai asli
+        } catch (error) {
+          console.error("Error rendering Guru signature:", error);
+          doc.setFontSize(10);
+          doc.text(
+            "Gagal render tanda tangan Guru.",
+            rightColumnX + 10,
+            currentY - 5 + 10
+          );
+        }
       }
 
       // Pisahkan "Guru Kelas" dengan posisi yang lebih tinggi
-      doc.text("Guru Kelas,", rightColumnX + 25, currentY - 2, {
-        align: "center",
-      });
+      doc.text(
+        `${schoolData.statusGuru || "Guru Kelas"},`,
+        rightColumnX + 25,
+        currentY - 2,
+        {
+          align: "center",
+        }
+      );
 
       // Kosong dan kosong
       doc.text("", rightColumnX + 25, currentY + lineSpacing, {
@@ -1993,7 +2929,6 @@ const MonthlyRecapTab: React.FC<{
         <h2 className="text-2xl font-bold text-center text-blue-700 mb-6">
           📊 Rekap Absensi Bulanan
         </h2>
-
         <div className="mb-6 flex flex-col md:flex-row gap-4 items-center justify-center">
           <div className="text-center">
             <p className="text-sm text-gray-500 mb-2">Filter Kelas</p>
@@ -2041,16 +2976,6 @@ const MonthlyRecapTab: React.FC<{
                 type="date"
                 value={selectedDate}
                 onChange={(e) => setSelectedDate(e.target.value)}
-                className="border border-gray-300 rounded-lg px-1 py-0.5 shadow-sm bg-white min-w-32"
-              />
-            </div>
-            <div className="text-center">
-              <p className="text-sm text-gray-500 mb-2">Nama Tempat</p>
-              <input
-                type="text"
-                value={placeName}
-                onChange={(e) => setPlaceName(e.target.value)}
-                placeholder="Masukkan nama tempat"
                 className="border border-gray-300 rounded-lg px-1 py-0.5 shadow-sm bg-white min-w-32"
               />
             </div>
@@ -2103,6 +3028,9 @@ const MonthlyRecapTab: React.FC<{
               <table className="min-w-full border-collapse border border-gray-200">
                 <thead>
                   <tr className="bg-gray-100">
+                    <th className="border border-gray-200 px-2 py-0.5 text-center text-sm font-semibold text-gray-700">
+                      No.
+                    </th>
                     <th className="border border-gray-200 px-1 py-0.5 text-left text-sm font-semibold text-gray-700">
                       Nama
                     </th>
@@ -2132,6 +3060,9 @@ const MonthlyRecapTab: React.FC<{
                       key={index}
                       className={index % 2 === 0 ? "bg-white" : "bg-gray-50"}
                     >
+                      <td className="border border-gray-200 px-2 py-0.5 text-center text-sm text-gray-600 font-medium">
+                        {index + 1}
+                      </td>
                       <td className="border border-gray-200 px-1 py-0.5 text-sm text-gray-600">
                         {item.nama || "N/A"}
                       </td>
@@ -2455,434 +3386,12 @@ const GraphTab: React.FC<{
   );
 };
 
-const AttendanceHistoryTab: React.FC<{
-  students: Student[];
+const SemesterRecapTab: React.FC<{
   uniqueClasses: string[];
-  onRefresh: () => void;
-}> = ({ students, uniqueClasses, onRefresh }) => {
-  const [attendanceData, setAttendanceData] = useState<AttendanceHistory[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [selectedKelas, setSelectedKelas] = useState<string>("Semua");
-  const [selectedNama, setSelectedNama] = useState<string>("Semua");
-  const [selectedDate, setSelectedDate] = useState<string>("");
-  const [editedRecords, setEditedRecords] = useState<
-    Record<string, AttendanceStatus>
-  >({});
-  const [isDeleting, setIsDeleting] = useState<boolean>(false);
-  const [isSaving, setIsSaving] = useState<boolean>(false);
-
-  const formatDateToDDMMYYYY = (dateStr: string): string => {
-    if (/^\d{2}\/\d{2}\/\d{4}$/.test(dateStr)) return dateStr;
-    const [datePart] = dateStr.split("T");
-    const [year, month, day] = datePart.split("-");
-    return `${day}/${month}/${year}`;
-  };
-
-  const filterNonFormulaData = (
-    data: AttendanceHistory[]
-  ): AttendanceHistory[] => {
-    return data.filter((record) => {
-      const hasValidTanggal =
-        record.tanggal &&
-        !record.tanggal.toString().startsWith("=") &&
-        record.tanggal.toString().trim() !== "" &&
-        record.tanggal.toString() !== "#N/A" &&
-        record.tanggal.toString() !== "#REF!" &&
-        record.tanggal.toString() !== "#VALUE!" &&
-        record.tanggal.toString() !== "#ERROR!" &&
-        !record.tanggal.toString().includes("FORMULA");
-
-      const hasValidNama =
-        record.nama &&
-        !record.nama.toString().startsWith("=") &&
-        record.nama.toString().trim() !== "" &&
-        record.nama.toString() !== "#N/A" &&
-        record.nama.toString() !== "#REF!" &&
-        record.nama.toString() !== "#VALUE!" &&
-        record.nama.toString() !== "#ERROR!" &&
-        !record.nama.toString().includes("FORMULA");
-
-      const hasValidNisn =
-        record.nisn &&
-        !record.nisn.toString().startsWith("=") &&
-        record.nisn.toString().trim() !== "" &&
-        record.nisn.toString() !== "#N/A" &&
-        record.nisn.toString() !== "#REF!" &&
-        record.nisn.toString() !== "#VALUE!" &&
-        record.nisn.toString() !== "#ERROR!" &&
-        !record.nisn.toString().includes("FORMULA");
-
-      const hasValidKelas =
-        record.kelas &&
-        !record.kelas.toString().startsWith("=") &&
-        record.kelas.toString().trim() !== "" &&
-        record.kelas.toString() !== "#N/A" &&
-        record.kelas.toString() !== "#REF!" &&
-        record.kelas.toString() !== "#VALUE!" &&
-        record.kelas.toString() !== "#ERROR!" &&
-        !record.kelas.toString().includes("FORMULA");
-
-      const hasValidStatus =
-        record.status &&
-        !record.status.toString().startsWith("=") &&
-        record.status.toString().trim() !== "" &&
-        record.status.toString() !== "#N/A" &&
-        record.status.toString() !== "#REF!" &&
-        record.status.toString() !== "#VALUE!" &&
-        record.status.toString() !== "#ERROR!" &&
-        !record.status.toString().includes("FORMULA") &&
-        ["Hadir", "Izin", "Sakit", "Alpha"].includes(record.status.toString());
-
-      // Tambahkan validasi untuk kolom duplikat: hanya ambil jika nilai eksak "-", dan bukan formula/error
-      const hasValidDuplikat =
-        record.duplikat &&
-        record.duplikat.toString().trim() === "-" && // Hanya ambil jika "-"
-        !record.duplikat.toString().startsWith("=") &&
-        record.duplikat.toString() !== "#N/A" &&
-        record.duplikat.toString() !== "#REF!" &&
-        record.duplikat.toString() !== "#VALUE!" &&
-        record.duplikat.toString() !== "#ERROR!" &&
-        !record.duplikat.toString().includes("FORMULA");
-
-      return (
-        hasValidTanggal &&
-        hasValidNama &&
-        hasValidNisn &&
-        hasValidKelas &&
-        hasValidStatus &&
-        hasValidDuplikat // Tambahkan ini untuk memfilter berdasarkan duplikat = "-"
-      );
-    });
-  };
-
-  useEffect(() => {
-    setLoading(true);
-    fetch(`${endpoint}?action=attendanceHistory`)
-      .then((res) => {
-        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-        return res.json();
-      })
-      .then((data) => {
-        if (data.success) {
-          const newData = data.data || [];
-          const filteredData = filterNonFormulaData(newData);
-
-          const updatedData = filteredData.map((record: AttendanceHistory) => {
-            const key = `${record.tanggal}_${record.nisn}`;
-            return {
-              ...record,
-              status: editedRecords[key] || record.status,
-            };
-          });
-          setAttendanceData(updatedData);
-        } else {
-          if (data.message === "Tidak ada data di sheet Absensi") {
-            setAttendanceData([]);
-          } else {
-            alert("❌ Gagal memuat data riwayat absensi: " + data.message);
-            setAttendanceData([]);
-          }
-        }
-        setLoading(false);
-      })
-      .catch((error) => {
-        console.error("Error fetch:", error);
-        alert(
-          "❌ Gagal memuat data riwayat absensi. Cek console untuk detail."
-        );
-        setLoading(false);
-      });
-  }, [onRefresh]);
-
-  const handleUpdateStatus = (
-    record: AttendanceHistory,
-    newStatus: AttendanceStatus
-  ) => {
-    const key = `${record.tanggal}_${record.nisn}`;
-    setEditedRecords((prev) => ({
-      ...prev,
-      [key]: newStatus,
-    }));
-    setAttendanceData((prev) =>
-      prev.map((item) =>
-        item.tanggal === record.tanggal && item.nisn === record.nisn
-          ? { ...item, status: newStatus }
-          : item
-      )
-    );
-  };
-
-  const handleDeleteAllAttendance = () => {
-    if (
-      confirm(
-        "Yakin ingin menghapus semua data absensi di sheet 'absensi'? Header tidak akan terhapus."
-      )
-    ) {
-      setIsDeleting(true);
-      fetch(endpoint, {
-        method: "POST",
-        mode: "no-cors",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          type: "deleteAllAttendance",
-          sheetName: "absensi",
-        }),
-      })
-        .then(() => {
-          alert(
-            "✅ Semua data absensi di sheet 'absensi' berhasil dihapus. Header tetap utuh."
-          );
-          setAttendanceData([]);
-          setEditedRecords({});
-          onRefresh();
-        })
-        .catch(() =>
-          alert("❌ Gagal menghapus data absensi di sheet 'absensi'.")
-        )
-        .finally(() => setIsDeleting(false));
-    }
-  };
-
-  const filteredStudents = React.useMemo(() => {
-    return selectedKelas === "Semua"
-      ? students
-      : students.filter(
-          (student) => String(student.kelas).trim() === selectedKelas
-        );
-  }, [students, selectedKelas]);
-
-  const uniqueNames = React.useMemo(() => {
-    const names = filteredStudents
-      .map((student) => student.name)
-      .filter((name): name is string => name != null && name.trim() !== "");
-    return ["Semua", ...Array.from(new Set(names)).sort()];
-  }, [filteredStudents]);
-
-  const filteredAttendanceData = React.useMemo(() => {
-    return attendanceData.filter((record) => {
-      const matchesKelas =
-        selectedKelas === "Semua" ||
-        String(record.kelas).trim() === selectedKelas;
-      const matchesNama =
-        selectedNama === "Semua" || record.nama === selectedNama;
-      const matchesDate =
-        selectedDate === "" || record.tanggal === selectedDate;
-      return matchesKelas && matchesNama && matchesDate;
-    });
-  }, [attendanceData, selectedKelas, selectedNama, selectedDate]);
-
-  useEffect(() => {
-    setSelectedNama("Semua");
-  }, [selectedKelas]);
-
-  const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const isoDate = e.target.value;
-    if (isoDate) {
-      setSelectedDate(formatDateToDDMMYYYY(isoDate));
-    } else {
-      setSelectedDate("");
-    }
-  };
-
-  const statusColor: Record<AttendanceStatus, string> = {
-    Hadir: "bg-green-500",
-    Izin: "bg-yellow-400",
-    Sakit: "bg-blue-400",
-    Alpha: "bg-red-500",
-  };
-
-  const saveChanges = () => {
-    if (Object.keys(editedRecords).length === 0) {
-      alert("⚠️ Tidak ada perubahan yang perlu disimpan.");
-      return;
-    }
-
-    setIsSaving(true);
-    const updates = Object.entries(editedRecords).map(([key, status]) => {
-      const [tanggal, nisn] = key.split("_");
-      return { tanggal, nisn, status };
-    });
-
-    fetch(endpoint, {
-      method: "POST",
-      mode: "no-cors",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        type: "bulkUpdateAttendance",
-        updates,
-      }),
-    })
-      .then(() => {
-        alert("✅ Perubahan status kehadiran berhasil disimpan!");
-        setEditedRecords({});
-        onRefresh();
-      })
-      .catch(() => alert("❌ Gagal menyimpan perubahan status kehadiran."))
-      .finally(() => setIsSaving(false));
-  };
-
-  return (
-    <div className="max-w-4xl mx-auto" style={{ paddingBottom: "70px" }}>
-      <div className="bg-white p-6 rounded-lg shadow-md">
-        <h2 className="text-2xl font-bold text-center text-blue-700 mb-6">
-          📜 Riwayat Absensi
-        </h2>
-
-        <div className="mb-6 flex flex-col md:flex-row gap-4 items-center justify-center">
-          <div className="text-center">
-            <p className="text-sm text-gray-500 mb-2">Filter Kelas</p>
-            <select
-              value={selectedKelas}
-              onChange={(e) => setSelectedKelas(e.target.value)}
-              className="border border-gray-300 rounded-lg px-1 py-0.5 shadow-sm bg-white min-w-32"
-            >
-              {uniqueClasses.map((kelas) => (
-                <option key={kelas} value={kelas}>
-                  {kelas}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="text-center">
-            <p className="text-sm text-gray-500 mb-2">Filter Nama Siswa</p>
-            <select
-              value={selectedNama}
-              onChange={(e) => setSelectedNama(e.target.value)}
-              className="border border-gray-300 rounded-lg px-1 py-0.5 shadow-sm bg-white min-w-32"
-            >
-              {uniqueNames.map((name) => (
-                <option key={name} value={name}>
-                  {name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="text-center">
-            <p className="text-sm text-gray-500 mb-2">Filter Tanggal</p>
-            <input
-              type="date"
-              onChange={handleDateChange}
-              className="border border-gray-300 rounded-lg px-1 py-0.5 shadow-sm"
-            />
-          </div>
-        </div>
-
-        {loading ? (
-          <div className="text-center py-8">
-            <p className="text-gray-500">Memuat riwayat...</p>
-          </div>
-        ) : filteredAttendanceData.length === 0 ? (
-          <div className="text-center py-8">
-            <p className="text-gray-500">
-              Tidak ada data riwayat absensi yang sesuai dengan filter.
-            </p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full border-collapse border border-gray-200">
-              <thead>
-                <tr className="bg-gray-100">
-                  <th className="border border-gray-200 px-1 py-0.5 text-left text-sm font-semibold text-gray-700">
-                    Tanggal
-                  </th>
-                  <th className="border border-gray-200 px-1 py-0.5 text-left text-sm font-semibold text-gray-700">
-                    Nama
-                  </th>
-                  <th className="border border-gray-200 px-1 py-0.5 text-left text-sm font-semibold text-gray-700">
-                    Kelas
-                  </th>
-                  <th className="border border-gray-200 px-1 py-0.5 text-left text-sm font-semibold text-gray-700">
-                    NISN
-                  </th>
-                  <th className="border border-gray-200 px-1 py-0.5 text-center text-sm font-semibold text-gray-700">
-                    Status
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredAttendanceData.map((record, index) => {
-                  const key = `${record.tanggal}_${record.nisn}`;
-                  const currentStatus = editedRecords[key] || record.status;
-                  return (
-                    <tr
-                      key={index}
-                      className={index % 2 === 0 ? "bg-white" : "bg-gray-50"}
-                    >
-                      <td className="border border-gray-200 px-1 py-0.5 text-sm text-gray-600">
-                        {record.tanggal || "N/A"}
-                      </td>
-                      <td className="border border-gray-200 px-1 py-0.5 text-sm text-gray-600">
-                        {record.nama || "N/A"}
-                      </td>
-                      <td className="border border-gray-200 px-1 py-0.5 text-sm text-gray-600">
-                        {record.kelas || "N/A"}
-                      </td>
-                      <td className="border border-gray-200 px-1 py-0.5 text-sm text-gray-600">
-                        {record.nisn || "N/A"}
-                      </td>
-                      <td className="border border-gray-200 px-1 py-0.5 text-center">
-                        <div className="flex justify-between">
-                          {(["Hadir", "Izin", "Sakit", "Alpha"] as const).map(
-                            (status) => (
-                              <button
-                                key={status}
-                                onClick={() =>
-                                  handleUpdateStatus(record, status)
-                                }
-                                style={{ width: "2cm" }}
-                                className={`px-1 py-0.5 rounded-lg text-xs font-medium transition-colors ${
-                                  currentStatus === status
-                                    ? `${statusColor[status]} text-white`
-                                    : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-100"
-                                }`}
-                              >
-                                {status}
-                              </button>
-                            )
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        <div className="mt-6 flex flex-col md:flex-row gap-4 justify-center">
-          {Object.keys(editedRecords).length > 0 && (
-            <button
-              onClick={saveChanges}
-              disabled={isSaving}
-              className={`px-6 py-2 text-white rounded-lg font-medium ${
-                isSaving
-                  ? "bg-blue-400 cursor-not-allowed"
-                  : "bg-blue-600 hover:bg-blue-700"
-              }`}
-            >
-              {isSaving ? "Memproses..." : "💾 Simpan Perubahan"}
-            </button>
-          )}
-          <button
-            onClick={handleDeleteAllAttendance}
-            disabled={isDeleting}
-            className={`px-6 py-2 text-white rounded-lg font-medium ${
-              isDeleting
-                ? "bg-red-400 cursor-not-allowed"
-                : "bg-red-600 hover:bg-red-700"
-            }`}
-          >
-            {isDeleting ? "Memproses..." : "🗑️ Hapus Semua Data Absensi"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-const SemesterRecapTab: React.FC<{ uniqueClasses: string[] }> = ({
+  students: Student[]; // ✅ TAMBAHKAN INI
+}> = ({
   uniqueClasses,
+  students, // ✅ DAN INI
 }) => {
   const [recapData, setRecapData] = useState<SemesterRecap[]>([]);
   const [selectedKelas, setSelectedKelas] = useState<string>("Semua");
@@ -2890,7 +3399,7 @@ const SemesterRecapTab: React.FC<{ uniqueClasses: string[] }> = ({
   const [selectedDate, setSelectedDate] = useState<string>(
     new Date().toISOString().split("T")[0]
   );
-  const [placeName, setPlaceName] = useState<string>("Makassar");
+
   const [loading, setLoading] = useState<boolean>(true);
   const [schoolData, setSchoolData] = useState<SchoolData | null>(null);
 
@@ -2978,6 +3487,7 @@ const SemesterRecapTab: React.FC<{ uniqueClasses: string[] }> = ({
 
   const downloadExcel = () => {
     const headers = [
+      "No.",
       "Nama",
       "Kelas",
       "Hadir",
@@ -2988,7 +3498,8 @@ const SemesterRecapTab: React.FC<{ uniqueClasses: string[] }> = ({
     ];
     const data = [
       headers,
-      ...filteredRecapData.map((item) => [
+      ...filteredRecapData.map((item, index) => [
+        index + 1, // Nomor urut
         item.nama || "N/A",
         item.kelas || "N/A",
         item.hadir || 0,
@@ -2998,6 +3509,7 @@ const SemesterRecapTab: React.FC<{ uniqueClasses: string[] }> = ({
         item.persenHadir !== undefined ? `${item.persenHadir}%` : "N/A",
       ]),
       [
+        "",
         "TOTAL",
         "",
         statusSummary.Hadir,
@@ -3007,6 +3519,7 @@ const SemesterRecapTab: React.FC<{ uniqueClasses: string[] }> = ({
         "",
       ],
       [
+        "",
         "PERSEN",
         "",
         `${(
@@ -3046,7 +3559,16 @@ const SemesterRecapTab: React.FC<{ uniqueClasses: string[] }> = ({
     ];
 
     const ws = XLSX.utils.aoa_to_sheet(data);
-    ws["!cols"] = headers.map(() => ({ wch: 15 }));
+    ws["!cols"] = [
+      { wch: 5 }, // Lebar kolom No. (sempit)
+      { wch: 25 }, // Nama
+      { wch: 10 }, // Kelas
+      { wch: 10 }, // Hadir
+      { wch: 10 }, // Alpha
+      { wch: 10 }, // Izin
+      { wch: 10 }, // Sakit
+      { wch: 10 }, // % Hadir
+    ];
     const headerStyle = {
       font: { bold: true },
       fill: { fgColor: { rgb: "FFFF00" } },
@@ -3067,12 +3589,12 @@ const SemesterRecapTab: React.FC<{ uniqueClasses: string[] }> = ({
       ws[cellAddress] = { ...ws[cellAddress], s: headerStyle };
     });
     const totalRow = filteredRecapData.length + 1;
-    ["A", "B", "C", "D", "E", "F", "G"].forEach((col, idx) => {
+    ["A", "B", "C", "D", "E", "F", "G", "H"].forEach((col, idx) => {
       const cellAddress = `${col}${totalRow}`;
       ws[cellAddress] = { ...ws[cellAddress], s: totalStyle };
     });
     const percentRow = filteredRecapData.length + 2;
-    ["A", "B", "C", "D", "E", "F", "G"].forEach((col, idx) => {
+    ["A", "B", "C", "D", "E", "F", "G", "H"].forEach((col, idx) => {
       const cellAddress = `${col}${percentRow}`;
       ws[cellAddress] = { ...ws[cellAddress], s: percentStyle };
     });
@@ -3094,7 +3616,7 @@ const SemesterRecapTab: React.FC<{ uniqueClasses: string[] }> = ({
     XLSX.writeFile(wb, fileName);
   };
 
-  const downloadPDF = () => {
+  const downloadPDF = async () => {
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.getWidth();
     const margin = 14;
@@ -3103,13 +3625,25 @@ const SemesterRecapTab: React.FC<{ uniqueClasses: string[] }> = ({
 
     doc.setFont("Times", "roman");
 
-    const title = `REKAP ABSENSI SISWA KELAS ${selectedKelas} SEMESTER ${selectedSemester} 2025`;
-    doc.setFontSize(14);
+    // Title - Format sama dengan Daftar Hadir
+    const namaSekolah = schoolData?.namaSekolah || "UPT SDN 13 BATANG";
+
+    // ✅ TAMBAHKAN: Ambil tahun dari selectedDate
+    const tahunDariTanggal = new Date(selectedDate).getFullYear();
+
+    // Judul dalam 1 baris dengan format Semester - gunakan tahunDariTanggal
+    const semesterLabel =
+      selectedSemester === "1" ? "SEMESTER 1" : "SEMESTER 2";
+    const title = `REKAP ABSENSI SISWA KELAS ${selectedKelas}  ${namaSekolah}  ${semesterLabel} ${tahunDariTanggal}`;
+
+    doc.setFontSize(12); // Ukuran font sama dengan daftar hadir
     doc.setFont("Times", "bold");
     doc.text(title, pageWidth / 2, currentY, { align: "center" });
+
     currentY += 10;
 
     const headers = [
+      "No.",
       "Nama",
       "Kelas",
       "Hadir",
@@ -3118,7 +3652,8 @@ const SemesterRecapTab: React.FC<{ uniqueClasses: string[] }> = ({
       "Sakit",
       "% Hadir",
     ];
-    const body = filteredRecapData.map((item) => [
+    const body = filteredRecapData.map((item, index) => [
+      index + 1, // Nomor urut
       item.nama || "N/A",
       item.kelas || "N/A",
       item.hadir || 0,
@@ -3129,6 +3664,7 @@ const SemesterRecapTab: React.FC<{ uniqueClasses: string[] }> = ({
     ]);
 
     const totalRow = [
+      "",
       "TOTAL",
       "",
       statusSummary.Hadir,
@@ -3137,7 +3673,9 @@ const SemesterRecapTab: React.FC<{ uniqueClasses: string[] }> = ({
       statusSummary.Sakit,
       "",
     ];
+
     const percentRow = [
+      "",
       "PERSEN",
       "",
       `${(
@@ -3187,13 +3725,102 @@ const SemesterRecapTab: React.FC<{ uniqueClasses: string[] }> = ({
       },
       alternateRowStyles: { fillColor: [240, 240, 240] },
       columnStyles: {
-        0: { cellWidth: 50 },
-        1: { cellWidth: 20 },
-        2: { cellWidth: 20 },
-        3: { cellWidth: 20 },
-        4: { cellWidth: 20 },
-        5: { cellWidth: 20 },
-        6: { cellWidth: 20 },
+        0: { cellWidth: 10 }, // No. (sempit)
+        1: { cellWidth: 50 }, // Nama
+        2: { cellWidth: 20 }, // Kelas
+        3: { cellWidth: 20 }, // Hadir
+        4: { cellWidth: 20 }, // Alpha
+        5: { cellWidth: 20 }, // Izin
+        6: { cellWidth: 20 }, // Sakit
+        7: { cellWidth: 20 }, // % Hadir
+      },
+    });
+
+    currentY = (doc as any).lastAutoTable.finalY + 10;
+
+    // ✅ TAMBAHAN BARU: Tabel Informasi Jumlah Siswa
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const bottomMargin = 20;
+    const spaceNeededForStudentTable = 20;
+    const spaceNeededForSignatures = 60; // Ruang untuk tanda tangan
+
+    // ✅ CEK APAKAH TANDA TANGAN + TABEL SISWA MUAT DI HALAMAN INI
+    // Cek apakah ada cukup ruang untuk tabel jumlah siswa DAN tanda tangan
+    if (
+      currentY + spaceNeededForStudentTable + spaceNeededForSignatures >
+      pageHeight - bottomMargin
+    ) {
+      doc.addPage();
+      currentY = margin;
+    }
+
+    // Hitung jumlah siswa berdasarkan jenis kelamin dari filteredRecapData
+    const genderSummary = filteredRecapData.reduce(
+      (acc, student) => {
+        // Cari data lengkap siswa untuk mendapatkan jenis kelamin
+        const studentData = students.find((s) => s.name === student.nama);
+        if (studentData) {
+          const jenisKelamin = String(studentData.jenisKelamin || "")
+            .trim()
+            .toUpperCase();
+          if (jenisKelamin === "L" || jenisKelamin === "LAKI-LAKI") {
+            acc.lakiLaki++;
+          } else if (jenisKelamin === "P" || jenisKelamin === "PEREMPUAN") {
+            acc.perempuan++;
+          }
+        }
+        return acc;
+      },
+      { lakiLaki: 0, perempuan: 0 }
+    );
+
+    const totalSiswa = genderSummary.lakiLaki + genderSummary.perempuan;
+
+    doc.setFontSize(10);
+    doc.setFont("Times", "bold");
+    doc.text("JUMLAH SISWA", margin, currentY, { align: "left" });
+    currentY += 3;
+
+    const tableWidth = (pageWidth - 2 * margin) * 0.4;
+
+    autoTable(doc, {
+      head: [["LAKI-LAKI", "PEREMPUAN", "TOTAL SISWA"]],
+      body: [
+        [
+          genderSummary.lakiLaki.toString(),
+          genderSummary.perempuan.toString(),
+          totalSiswa.toString(),
+        ],
+      ],
+      startY: currentY,
+      margin: { left: margin, right: pageWidth - margin - tableWidth },
+      tableWidth: tableWidth,
+      theme: "grid",
+      styles: {
+        font: "Times",
+        fontSize: 7,
+        cellPadding: 1,
+        halign: "center",
+        valign: "middle",
+        lineWidth: 0.5,
+      },
+      headStyles: {
+        fillColor: [255, 255, 255],
+        textColor: [0, 0, 0],
+        fontStyle: "bold",
+        lineWidth: 1,
+      },
+      bodyStyles: {
+        fillColor: [255, 255, 255],
+        textColor: [0, 0, 0],
+        fontStyle: "bold",
+        fontSize: 10,
+        lineWidth: 1,
+      },
+      columnStyles: {
+        0: { cellWidth: tableWidth / 3, fillColor: [255, 255, 255] },
+        1: { cellWidth: tableWidth / 3, fillColor: [255, 255, 255] },
+        2: { cellWidth: tableWidth / 3, fillColor: [255, 255, 255] },
       },
     });
 
@@ -3208,12 +3835,14 @@ const SemesterRecapTab: React.FC<{ uniqueClasses: string[] }> = ({
         month: "long",
         year: "numeric",
       });
-      const placeDateText = `${placeName}, ${formattedDate}`;
-      const rightColumnX = pageWidth - margin - 50;
+      const placeDateText = `${
+        schoolData.namaKota || "Makassar"
+      }, ${formattedDate}`;
+      const rightColumnX = pageWidth - margin - 50; // Signature width is 50
       doc.text(placeDateText, rightColumnX + 25, currentY - 1, {
         align: "center",
       });
-      currentY += 5;
+      currentY += 5; // Keep close to "Guru Kelas"
 
       const principalText = [
         "Kepala Sekolah,",
@@ -3236,28 +3865,32 @@ const SemesterRecapTab: React.FC<{ uniqueClasses: string[] }> = ({
 
       // Principal signature and text
       if (schoolData.ttdKepsek) {
-        doc.addImage(
-          schoolData.ttdKepsek,
-          "PNG",
-          leftColumnX + 10,
-          currentY - 3,
-          signatureWidth,
-          signatureHeight
-        );
+        try {
+          const canvas = document.createElement("canvas");
+          canvas.width = 150; // Sesuaikan ukuran canvas (lebar lebih besar untuk tanda tangan panjang)
+          canvas.height = 50; // Sesuaikan ukuran canvas (tinggi cukup untuk garis tanda tangan)
+          const ctx = canvas.getContext("2d");
+          const v = await Canvg.from(ctx, schoolData.ttdKepsek); // schoolData.ttdKepsek adalah base64 SVG
+          v.start();
+          const pngData = canvas.toDataURL("image/png");
+          doc.addImage(
+            pngData,
+            "PNG",
+            leftColumnX + 10,
+            currentY - 3,
+            signatureWidth,
+            signatureHeight
+          ); // Sesuaikan posisi sesuai asli
+        } catch (error) {
+          console.error("Error rendering Kepsek signature:", error);
+          doc.setFontSize(10);
+          doc.text(
+            "Gagal render tanda tangan Kepala Sekolah.",
+            leftColumnX + 10,
+            currentY - 3 + 10
+          );
+        }
       }
-
-      // Pisahkan "Kepala Sekolah" dengan posisi yang lebih tinggi
-      doc.text("Kepala Sekolah,", leftColumnX + 25, currentY - 2, {
-        align: "center",
-      });
-
-      // Kosong dan kosong
-      doc.text("", leftColumnX + 25, currentY + lineSpacing, {
-        align: "center",
-      });
-      doc.text("", leftColumnX + 25, currentY + 2 * lineSpacing, {
-        align: "center",
-      });
 
       // Pisahkan "Kepala Sekolah" dengan posisi yang lebih tinggi
       doc.text("Kepala Sekolah,", leftColumnX + 25, currentY - 2, {
@@ -3303,20 +3936,42 @@ const SemesterRecapTab: React.FC<{ uniqueClasses: string[] }> = ({
 
       // Teacher signature and text
       if (schoolData.ttdGuru) {
-        doc.addImage(
-          schoolData.ttdGuru,
-          "PNG",
-          rightColumnX + 10,
-          currentY - 5,
-          signatureWidth,
-          signatureHeight
-        );
+        try {
+          const canvas = document.createElement("canvas");
+          canvas.width = 150; // Sesuaikan ukuran canvas
+          canvas.height = 50;
+          const ctx = canvas.getContext("2d");
+          const v = await Canvg.from(ctx, schoolData.ttdGuru); // schoolData.ttdGuru adalah base64 SVG
+          v.start();
+          const pngData = canvas.toDataURL("image/png");
+          doc.addImage(
+            pngData,
+            "PNG",
+            rightColumnX + 10,
+            currentY - 5,
+            signatureWidth,
+            signatureHeight
+          ); // Sesuaikan posisi sesuai asli
+        } catch (error) {
+          console.error("Error rendering Guru signature:", error);
+          doc.setFontSize(10);
+          doc.text(
+            "Gagal render tanda tangan Guru.",
+            rightColumnX + 10,
+            currentY - 5 + 10
+          );
+        }
       }
 
       // Pisahkan "Guru Kelas" dengan posisi yang lebih tinggi
-      doc.text("Guru Kelas,", rightColumnX + 25, currentY - 2, {
-        align: "center",
-      });
+      doc.text(
+        `${schoolData.statusGuru || "Guru Kelas"},`,
+        rightColumnX + 25,
+        currentY - 2,
+        {
+          align: "center",
+        }
+      );
 
       // Kosong dan kosong
       doc.text("", rightColumnX + 25, currentY + lineSpacing, {
@@ -3425,16 +4080,6 @@ const SemesterRecapTab: React.FC<{ uniqueClasses: string[] }> = ({
                 className="border border-gray-300 rounded-lg px-1 py-0.5 shadow-sm bg-white min-w-32"
               />
             </div>
-            <div className="text-center">
-              <p className="text-sm text-gray-500 mb-2">Nama Tempat</p>
-              <input
-                type="text"
-                value={placeName}
-                onChange={(e) => setPlaceName(e.target.value)}
-                placeholder="Masukkan nama tempat"
-                className="border border-gray-300 rounded-lg px-1 py-0.5 shadow-sm bg-white min-w-32"
-              />
-            </div>
           </div>
         </div>
 
@@ -3485,6 +4130,9 @@ const SemesterRecapTab: React.FC<{ uniqueClasses: string[] }> = ({
               <table className="min-w-full border-collapse border border-gray-200">
                 <thead>
                   <tr className="bg-gray-100">
+                    <th className="border border-gray-200 px-2 py-0.5 text-center text-sm font-semibold text-gray-700">
+                      No.
+                    </th>
                     <th className="border border-gray-200 px-1 py-0.5 text-left text-sm font-semibold text-gray-700">
                       Nama
                     </th>
@@ -3514,6 +4162,9 @@ const SemesterRecapTab: React.FC<{ uniqueClasses: string[] }> = ({
                       key={index}
                       className={index % 2 === 0 ? "bg-white" : "bg-gray-50"}
                     >
+                      <td className="border border-gray-200 px-2 py-0.5 text-center text-sm text-gray-600 font-medium">
+                        {index + 1}
+                      </td>
                       <td className="border border-gray-200 px-1 py-0.5 text-sm text-gray-600">
                         {item.nama || "N/A"}
                       </td>
@@ -3827,13 +4478,340 @@ const SplashScreen: React.FC = () => {
         `}
       </style>
       <img
-        src="\images\IMG_20250518_064410.png"
+        src="\images\logo_1.png"
         alt="Logo Aplikasi"
         className="w-52 h-70 mb-4 animate-pulse-custom" //Pengaturan ukuran logo
       />
-      <p className="text-gray-800 text-lg font-semibold mt-6">
-        Ronaldi, S.Pd
-      </p>
+      <p className="text-gray-800 text-lg font-semibold mt-6">Ronaldi, S.Pd</p>
+    </div>
+  );
+};
+
+const JadwalMengajarTab: React.FC<{
+  onRefresh: () => void;
+}> = ({ onRefresh }) => {
+  const [jadwalList, setJadwalList] = useState<JadwalMengajar[]>([]);
+  const [kelasOptions, setKelasOptions] = useState<string[]>([]);
+  const [selectedKelas, setSelectedKelas] = useState("");
+  const [selectedHari, setSelectedHari] = useState<string[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [isDeleting, setIsDeleting] = useState<boolean>(false);
+  const [editingKelas, setEditingKelas] = useState<string | null>(null);
+
+  const hariOptions = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
+
+  useEffect(() => {
+    fetchJadwalMengajar();
+    fetchKelasOptions();
+  }, []);
+
+  const fetchJadwalMengajar = () => {
+    setLoading(true);
+    fetch(`${endpoint}?action=jadwalMengajar`)
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+        return res.json();
+      })
+      .then((data) => {
+        if (data.success) {
+          setJadwalList(data.data || []);
+        } else {
+          alert("❌ Gagal memuat data jadwal: " + data.message);
+          setJadwalList([]);
+        }
+        setLoading(false);
+      })
+      .catch((error) => {
+        console.error("Error fetch:", error);
+        alert("❌ Gagal memuat data jadwal. Cek console untuk detail.");
+        setLoading(false);
+      });
+  };
+
+  const fetchKelasOptions = () => {
+    fetch(`${endpoint}?action=kelasOptions`)
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+        return res.json();
+      })
+      .then((data) => {
+        if (data.success) {
+          setKelasOptions(data.data || []);
+        }
+      })
+      .catch((error) => {
+        console.error("Error fetch kelas options:", error);
+      });
+  };
+
+  const handleHariToggle = (hari: string) => {
+    setSelectedHari((prev) =>
+      prev.includes(hari) ? prev.filter((h) => h !== hari) : [...prev, hari]
+    );
+  };
+
+  const handleSubmit = () => {
+    if (!selectedKelas || selectedHari.length === 0) {
+      alert("⚠️ Kelas dan minimal satu hari wajib dipilih!");
+      return;
+    }
+
+    setIsSaving(true);
+
+    const hariString = selectedHari.join(", ");
+
+    fetch(endpoint, {
+      method: "POST",
+      mode: "no-cors",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: "jadwalMengajar",
+        kelas: selectedKelas,
+        hari: hariString,
+      }),
+    })
+      .then(() => {
+        alert("✅ Jadwal mengajar berhasil ditambahkan!");
+        setSelectedKelas("");
+        setSelectedHari([]);
+        fetchJadwalMengajar();
+        onRefresh();
+        setIsSaving(false);
+      })
+      .catch(() => {
+        alert("❌ Gagal menambahkan jadwal mengajar.");
+        setIsSaving(false);
+      });
+  };
+
+  const handleEdit = (jadwal: JadwalMengajar) => {
+    setSelectedKelas(jadwal.kelas);
+    setSelectedHari(jadwal.hari.split(", ").map((h) => h.trim()));
+    setEditingKelas(jadwal.kelas);
+  };
+
+  const handleUpdate = () => {
+    if (!selectedKelas || selectedHari.length === 0 || !editingKelas) {
+      alert("⚠️ Kelas dan minimal satu hari wajib dipilih!");
+      return;
+    }
+
+    setIsSaving(true);
+
+    const hariString = selectedHari.join(", ");
+
+    fetch(endpoint, {
+      method: "POST",
+      mode: "no-cors",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: "editJadwalMengajar",
+        kelasLama: editingKelas,
+        kelasBaru: selectedKelas,
+        hari: hariString,
+      }),
+    })
+      .then(() => {
+        alert("✅ Jadwal mengajar berhasil diperbarui!");
+        setSelectedKelas("");
+        setSelectedHari([]);
+        setEditingKelas(null);
+        fetchJadwalMengajar();
+        onRefresh();
+        setIsSaving(false);
+      })
+      .catch(() => {
+        alert("❌ Gagal memperbarui jadwal mengajar.");
+        setIsSaving(false);
+      });
+  };
+
+  const handleDelete = (kelas: string) => {
+    if (!confirm(`Yakin ingin menghapus jadwal mengajar kelas: ${kelas}?`)) {
+      return;
+    }
+
+    setIsDeleting(true);
+
+    fetch(endpoint, {
+      method: "POST",
+      mode: "no-cors",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: "deleteJadwalMengajar",
+        kelas: kelas,
+      }),
+    })
+      .then(() => {
+        alert("✅ Jadwal mengajar berhasil dihapus!");
+        fetchJadwalMengajar();
+        onRefresh();
+        setIsDeleting(false);
+      })
+      .catch(() => {
+        alert("❌ Gagal menghapus jadwal mengajar.");
+        setIsDeleting(false);
+      });
+  };
+
+  const handleCancel = () => {
+    setSelectedKelas("");
+    setSelectedHari([]);
+    setEditingKelas(null);
+  };
+
+  if (loading) {
+    return (
+      <div className="text-center py-8">
+        <p className="text-gray-500">Memuat data jadwal mengajar...</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-4xl mx-auto" style={{ paddingBottom: "70px" }}>
+      <div className="bg-white p-6 rounded-lg shadow-md mb-6">
+        <h2 className="text-xl font-bold mb-4 text-center text-blue-600">
+          {editingKelas !== null
+            ? "Edit Jadwal Mengajar"
+            : "Tambah Jadwal Mengajar"}
+        </h2>
+        <div className="grid grid-cols-1 gap-4 mb-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Pilih Kelas
+            </label>
+            <select
+              value={selectedKelas}
+              onChange={(e) => setSelectedKelas(e.target.value)}
+              className="w-full border border-gray-300 px-4 py-2 rounded-lg"
+              disabled={isSaving}
+            >
+              <option value="">-- Pilih Kelas --</option>
+              {kelasOptions.map((kelas) => (
+                <option key={kelas} value={kelas}>
+                  {kelas}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Pilih Hari (bisa lebih dari satu)
+            </label>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+              {hariOptions.map((hari) => (
+                <label
+                  key={hari}
+                  className={`flex items-center gap-2 p-3 border rounded-lg cursor-pointer transition-colors ${
+                    selectedHari.includes(hari)
+                      ? "bg-blue-50 border-blue-500"
+                      : "bg-white border-gray-300 hover:bg-gray-50"
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedHari.includes(hari)}
+                    onChange={() => handleHariToggle(hari)}
+                    disabled={isSaving}
+                    className="h-4 w-4 text-blue-600 rounded"
+                  />
+                  <span className="text-sm text-gray-700">{hari}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex justify-center gap-4">
+          {editingKelas !== null ? (
+            <>
+              <button
+                onClick={handleUpdate}
+                disabled={isSaving}
+                className={`px-6 py-2 rounded-lg font-medium transition-colors ${
+                  isSaving
+                    ? "bg-blue-400 cursor-not-allowed"
+                    : "bg-blue-600 hover:bg-blue-700"
+                } text-white`}
+              >
+                {isSaving ? "⏳ Menyimpan..." : "💾 Update"}
+              </button>
+              <button
+                onClick={handleCancel}
+                disabled={isSaving}
+                className="px-6 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-lg font-medium"
+              >
+                ❌ Batal
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={handleSubmit}
+              disabled={isSaving}
+              className={`px-6 py-2 rounded-lg font-medium transition-colors ${
+                isSaving
+                  ? "bg-blue-400 cursor-not-allowed"
+                  : "bg-blue-600 hover:bg-blue-700"
+              } text-white`}
+            >
+              {isSaving ? "⏳ Menyimpan..." : "➕ Tambah Jadwal Mengajar"}
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="bg-white p-6 rounded-lg shadow-md">
+        <h3 className="text-lg font-semibold text-gray-700 mb-4">
+          Daftar Jadwal Mengajar ({jadwalList.length})
+        </h3>
+        {jadwalList.length === 0 ? (
+          <p className="text-center text-gray-500 py-8">
+            Belum ada data jadwal mengajar.
+          </p>
+        ) : (
+          <div className="space-y-3">
+            {jadwalList.map((jadwal, index) => (
+              <div
+                key={index}
+                className="flex justify-between items-center bg-gray-50 border border-gray-200 px-4 py-3 rounded-lg"
+              >
+                <div>
+                  <p className="font-medium text-gray-800">
+                    Kelas: {jadwal.kelas}
+                  </p>
+                  <p className="text-sm text-gray-600">Hari: {jadwal.hari}</p>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handleEdit(jadwal)}
+                    disabled={isSaving || isDeleting}
+                    className={`text-xs px-3 py-1 rounded transition-colors ${
+                      isSaving || isDeleting
+                        ? "bg-yellow-400 cursor-not-allowed"
+                        : "bg-yellow-500 hover:bg-yellow-600"
+                    } text-white`}
+                  >
+                    ✏️ Edit
+                  </button>
+                  <button
+                    onClick={() => handleDelete(jadwal.kelas)}
+                    disabled={isSaving || isDeleting}
+                    className={`text-xs px-3 py-1 rounded transition-colors ${
+                      isSaving || isDeleting
+                        ? "bg-red-400 cursor-not-allowed"
+                        : "bg-red-500 hover:bg-red-600"
+                    } text-white`}
+                  >
+                    🗑️ Hapus
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 };
@@ -3847,13 +4825,16 @@ const StudentAttendanceApp: React.FC = () => {
     | "attendance"
     | "recap"
     | "graph"
-    | "history"
     | "semesterRecap"
+    | "daftarHadir"
+    | "tanggalMerah"
+    | "jadwalMengajar"
     | "clearData"
   >("studentData");
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [schoolData, setSchoolData] = useState<SchoolData | null>(null);
 
   const fetchStudents = () => {
     fetch(endpoint)
@@ -3894,12 +4875,32 @@ const StudentAttendanceApp: React.FC = () => {
       });
   };
 
+  const fetchSchoolData = () => {
+    fetch(`${endpoint}?action=schoolData`)
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+        return res.json();
+      })
+      .then((data) => {
+        if (data.success && data.data && data.data.length > 0) {
+          setSchoolData(data.data[0]);
+          console.log("School data loaded:", data.data[0]);
+        } else {
+          setSchoolData(null);
+        }
+      })
+      .catch((error) => {
+        console.error("Error fetching school data:", error);
+      });
+  };
+
   const handleRecapRefresh = () => {
     setRefreshTrigger((prev) => prev + 1);
   };
 
   const handleRefresh = () => {
     fetchStudents();
+    fetchSchoolData();
   };
 
   useEffect(() => {
@@ -3907,6 +4908,7 @@ const StudentAttendanceApp: React.FC = () => {
     const timer = setTimeout(() => {
       setIsLoading(false);
       fetchStudents();
+      fetchSchoolData();
     }, 3000);
 
     return () => clearTimeout(timer);
@@ -3915,6 +4917,9 @@ const StudentAttendanceApp: React.FC = () => {
   if (isLoading) {
     return <SplashScreen />;
   }
+
+  const isGuruKelas = schoolData?.statusGuru === "Guru Kelas";
+  const shouldShowJadwalMengajar = !isGuruKelas;
 
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col">
@@ -3940,7 +4945,11 @@ const StudentAttendanceApp: React.FC = () => {
           { tab: "recap", label: "📊 Rekap Bulanan" },
           { tab: "semesterRecap", label: "📚 Rekap Semester" },
           { tab: "graph", label: "📈 Grafik" },
-          { tab: "history", label: "📜 Riwayat Absen" },
+          { tab: "daftarHadir", label: "📜 Riwayat Absen" },
+          { tab: "tanggalMerah", label: "📅 Data Tanggal Merah" },
+          ...(shouldShowJadwalMengajar
+            ? [{ tab: "jadwalMengajar", label: "🗓️ Jadwal Mengajar" }]
+            : []),
           { tab: "clearData", label: "🗑️ Hapus Data" },
         ].map(({ tab, label }) => (
           <button
@@ -3953,7 +4962,6 @@ const StudentAttendanceApp: React.FC = () => {
                   | "attendance"
                   | "recap"
                   | "graph"
-                  | "history"
                   | "semesterRecap"
                   | "clearData"
               );
@@ -3983,7 +4991,7 @@ const StudentAttendanceApp: React.FC = () => {
       {/* Logo di pojok kanan atas */}
       <div className="absolute top-4 right-4 z-50">
         <img
-          src="\images\Untitled design (6).png"
+          src="\images\logo_2.png"
           alt="Logo Aplikasi"
           className="w-16 h-16"
         />
@@ -4023,22 +5031,3418 @@ const StudentAttendanceApp: React.FC = () => {
             <MonthlyRecapTab
               onRefresh={handleRecapRefresh}
               uniqueClasses={uniqueClasses}
+              students={students} // ✅ TAMBAHKAN INI
             />
           )}
           {activeTab === "graph" && <GraphTab uniqueClasses={uniqueClasses} />}
-          {activeTab === "history" && (
-            <AttendanceHistoryTab
-              students={students}
+          {activeTab === "semesterRecap" && (
+            <SemesterRecapTab
               uniqueClasses={uniqueClasses}
-              onRefresh={fetchStudents}
+              students={students} // ✅ TAMBAHKAN INI
             />
           )}
-          {activeTab === "semesterRecap" && (
-            <SemesterRecapTab uniqueClasses={uniqueClasses} />
+          {activeTab === "daftarHadir" && (
+            <DaftarHadirTab students={students} uniqueClasses={uniqueClasses} />
+          )}
+          {activeTab === "tanggalMerah" && (
+            <TanggalMerahTab onRefresh={handleRefresh} />
+          )}
+          {activeTab === "jadwalMengajar" && shouldShowJadwalMengajar && (
+            <JadwalMengajarTab onRefresh={handleRefresh} />
           )}
           {activeTab === "clearData" && <ClearDataTab />}
         </div>
       </main>
+    </div>
+  );
+};
+
+const hasAnyAttendanceOnDate = (
+  students: Student[],
+  day: number,
+  attendanceDataGetter: (student: Student) => {
+    attendance: { [day: number]: string };
+  }
+): boolean => {
+  return students.some((student) => {
+    const { attendance } = attendanceDataGetter(student);
+    return attendance[day] && attendance[day] !== "";
+  });
+};
+
+const DaftarHadirTab: React.FC<{
+  students: Student[];
+  uniqueClasses: string[];
+}> = ({ students, uniqueClasses }) => {
+  const [attendanceData, setAttendanceData] = useState<AttendanceHistory[]>([]);
+  const [selectedKelas, setSelectedKelas] = useState<string>("Semua");
+  const [selectedMonth, setSelectedMonth] = useState<number>(
+    new Date().getMonth() + 1
+  ); // 1-12
+  const [selectedYear, setSelectedYear] = useState<number>(
+    new Date().getFullYear()
+  );
+  const [loading, setLoading] = useState<boolean>(true);
+  const [editedRecords, setEditedRecords] = useState<
+    Record<string, EditedRecord>
+  >({});
+  const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [deletingStudentId, setDeletingStudentId] = useState<string | null>(
+    null
+  );
+  const [schoolData, setSchoolData] = useState<SchoolData | null>(null);
+  const [selectedDate, setSelectedDate] = useState<string>(
+    new Date().toISOString().split("T")[0]
+  );
+
+  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
+  const [showModal, setShowModal] = useState<boolean>(false);
+  const [isDeleting, setIsDeleting] = useState<boolean>(false);
+  const [tanggalMerahList, setTanggalMerahList] = useState<TanggalMerah[]>([]);
+  const [loadingTanggalMerah, setLoadingTanggalMerah] =
+    useState<boolean>(false);
+  const [sundayDays, setSundayDays] = useState<Set<number>>(new Set());
+  const [filteredTanggalMerah, setFilteredTanggalMerah] = useState<
+    TanggalMerah[]
+  >([]);
+  const [jadwalMengajar, setJadwalMengajar] = useState<JadwalMengajar[]>([]);
+  const [loadingJadwal, setLoadingJadwal] = useState<boolean>(false);
+
+  const [customColors, setCustomColors] = useState({
+    hariMinggu: "#DC3545", // Merah default
+    liburSemester: "#22C55E", // Hijau default
+    tanggalMerah: "#D3D3D3", // Abu-abu default
+    bukanJadwal: "#93C5FD", // Biru muda default
+    jadwalMengajar: "#FFFFFF", // Putih default
+    dataEdit: "#FEF3C7", // Kuning default
+  });
+
+  const [showColorPicker, setShowColorPicker] = useState(false);
+
+  useEffect(() => {
+    const savedColors = localStorage.getItem("daftarHadirColors");
+    if (savedColors) {
+      try {
+        setCustomColors(JSON.parse(savedColors));
+      } catch (error) {
+        console.error("Error loading colors:", error);
+      }
+    }
+  }, []);
+
+  // Simpan warna ke localStorage setiap kali berubah
+  const handleColorChange = (colorKey: string, newColor: string) => {
+    const updatedColors = { ...customColors, [colorKey]: newColor };
+    setCustomColors(updatedColors);
+    localStorage.setItem("daftarHadirColors", JSON.stringify(updatedColors));
+  };
+
+  // Reset ke warna default
+  const resetColors = () => {
+    const defaultColors = {
+      hariMinggu: "#DC3545",
+      liburSemester: "#22C55E",
+      tanggalMerah: "#D3D3D3",
+      bukanJadwal: "#93C5FD",
+      jadwalMengajar: "#FFFFFF",
+      dataEdit: "#FEF3C7",
+    };
+    setCustomColors(defaultColors);
+    localStorage.setItem("daftarHadirColors", JSON.stringify(defaultColors));
+    alert("✅ Warna berhasil direset ke default!");
+  };
+
+  // Fungsi untuk mengecek apakah tanggal adalah hari Minggu
+  const isSunday = (day: number): boolean => {
+    const date = new Date(selectedYear, selectedMonth - 1, day);
+    return date.getDay() === 0; // 0 = Sunday
+  };
+
+  const months = [
+    { value: 1, label: "Januari" },
+    { value: 2, label: "Februari" },
+    { value: 3, label: "Maret" },
+    { value: 4, label: "April" },
+    { value: 5, label: "Mei" },
+    { value: 6, label: "Juni" },
+    { value: 7, label: "Juli" },
+    { value: 8, label: "Agustus" },
+    { value: 9, label: "September" },
+    { value: 10, label: "Oktober" },
+    { value: 11, label: "November" },
+    { value: 12, label: "Desember" },
+  ];
+
+  const years = Array.from({ length: 11 }, (_, i) => 2020 + i); // 2020-2030, sesuaikan jika perlu
+
+  // Hitung jumlah hari di bulan (pindahkan ke atas agar bisa digunakan di useMemo)
+  const daysInMonth = new Date(selectedYear, selectedMonth, 0).getDate();
+
+  // Filter siswa berdasarkan kelas (pindahkan ke atas sebelum memoization)
+  const filteredStudents = React.useMemo(() => {
+    const result =
+      selectedKelas === "Semua"
+        ? students
+        : students.filter(
+            (student) => String(student.kelas).trim() === selectedKelas
+          );
+
+    console.log("=== FILTERED STUDENTS ===");
+    console.log("Selected Kelas:", selectedKelas);
+    console.log("Total students:", result.length);
+    if (result.length > 0) {
+      console.log("Sample students (first 3):");
+      result.slice(0, 3).forEach((s, i) => {
+        console.log(`Student ${i}:`, {
+          name: s.name,
+          nisn: s.nisn,
+          kelas: s.kelas,
+        });
+      });
+    }
+
+    return result;
+  }, [students, selectedKelas]);
+
+  // Define getAttendanceForStudent FIRST before using in useMemo
+  const getAttendanceForStudent = React.useCallback(
+    (student: Student) => {
+      const studentAttendance: Record<number, string> = {};
+
+      const studentNisn = String(student.nisn || "")
+        .trim()
+        .replace(/\s+/g, "")
+        .toUpperCase();
+      const studentNama = String(student.name || "")
+        .trim()
+        .toLowerCase();
+
+      attendanceData.forEach((record) => {
+        const recordNisn = String(record.nisn || "")
+          .trim()
+          .replace(/\s+/g, "")
+          .toUpperCase();
+        const recordNama = String(record.nama || "")
+          .trim()
+          .toLowerCase();
+
+        const nisnMatch =
+          studentNisn && recordNisn && studentNisn === recordNisn;
+        const nameMatch =
+          studentNama && recordNama && studentNama === recordNama;
+        const isMatch = nisnMatch || nameMatch;
+
+        if (isMatch) {
+          const dateParts = record.tanggal.split("/");
+          if (dateParts.length === 3) {
+            const day = parseInt(dateParts[0], 10);
+            const month = parseInt(dateParts[1], 10);
+            const year = parseInt(dateParts[2], 10);
+
+            if (
+              month === selectedMonth &&
+              year === selectedYear &&
+              !isNaN(day)
+            ) {
+              let code = "";
+              switch (record.status) {
+                case "Hadir":
+                  code = "H";
+                  break;
+                case "Izin":
+                  code = "I";
+                  break;
+                case "Sakit":
+                  code = "S";
+                  break;
+                case "Alpha":
+                  code = "A";
+                  break;
+              }
+              if (code) studentAttendance[day] = code;
+            }
+          }
+        }
+      });
+
+      Object.entries(editedRecords).forEach(([key, record]) => {
+        const keyParts = key.split("_");
+        if (keyParts.length >= 2 && keyParts[0] === student.id) {
+          const day = parseInt(keyParts[1], 10);
+          const dateParts = record.date.split("/");
+          if (dateParts.length === 3) {
+            const month = parseInt(dateParts[1], 10);
+            const year = parseInt(dateParts[2], 10);
+
+            if (
+              month === selectedMonth &&
+              year === selectedYear &&
+              !isNaN(day)
+            ) {
+              let code = "";
+              switch (record.status) {
+                case "Hadir":
+                  code = "H";
+                  break;
+                case "Izin":
+                  code = "I";
+                  break;
+                case "Sakit":
+                  code = "S";
+                  break;
+                case "Alpha":
+                  code = "A";
+                  break;
+              }
+              if (code) {
+                studentAttendance[day] = code;
+              } else if (record.status === "") {
+                delete studentAttendance[day];
+              }
+            }
+          }
+        }
+      });
+
+      const countH = Object.values(studentAttendance).filter(
+        (v) => v === "H"
+      ).length;
+      const countS = Object.values(studentAttendance).filter(
+        (v) => v === "S"
+      ).length;
+      const countI = Object.values(studentAttendance).filter(
+        (v) => v === "I"
+      ).length;
+      const countA = Object.values(studentAttendance).filter(
+        (v) => v === "A"
+      ).length;
+
+      return {
+        attendance: studentAttendance,
+        counts: { H: countH, S: countS, I: countI, A: countA },
+      };
+    },
+    [attendanceData, editedRecords, selectedMonth, selectedYear]
+  );
+
+  // NOW use it in useMemo
+  const studentAttendanceMap = React.useMemo(() => {
+    const map = new Map();
+    filteredStudents.forEach((student) => {
+      map.set(student.id, getAttendanceForStudent(student));
+    });
+    return map;
+  }, [filteredStudents, getAttendanceForStudent]);
+
+  const attendanceByDateMemo = React.useMemo(() => {
+    const attendanceByDate: {
+      [day: number]: { hadir: number; total: number };
+    } = {};
+
+    filteredStudents.forEach((student) => {
+      const cached = studentAttendanceMap.get(student.id);
+      if (!cached) return;
+
+      const { attendance } = cached;
+
+      Array.from({ length: daysInMonth }, (_, day) => {
+        const dayNum = day + 1;
+        const status = attendance[dayNum] || "";
+
+        if (!attendanceByDate[dayNum]) {
+          attendanceByDate[dayNum] = { hadir: 0, total: 0 };
+        }
+
+        if (status === "H") {
+          attendanceByDate[dayNum].hadir += 1;
+        }
+
+        if (status !== "") {
+          attendanceByDate[dayNum].total += 1;
+        }
+      });
+    });
+
+    return attendanceByDate;
+  }, [filteredStudents, studentAttendanceMap, daysInMonth]);
+
+  const daysWithNoData = React.useMemo(() => {
+    const days = new Set<number>();
+    for (let day = 1; day <= daysInMonth; day++) {
+      const stats = attendanceByDateMemo[day] || { hadir: 0, total: 0 };
+      if (stats.total === 0) {
+        days.add(day);
+      }
+    }
+    return days;
+  }, [attendanceByDateMemo, daysInMonth]);
+
+  const fetchAttendanceData = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`${endpoint}?action=attendanceHistory`);
+      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+      const data = await res.json();
+      if (data.success) {
+        console.log("=== RAW DATA FROM SERVER ===");
+        console.log("Total records:", data.data.length);
+        // Log sample data (tetap jika ingin debug)
+        if (data.data.length > 0) {
+          console.log("Sample records (first 5):");
+          data.data.slice(0, 5).forEach((record: any, index: number) => {
+            console.log(`Record ${index}:`, {
+              tanggal: record.tanggal,
+              nama: record.nama,
+              kelas: record.kelas,
+              nisn: record.nisn,
+              status: record.status,
+            });
+          });
+        }
+        const validData = filterValidAttendance(data.data || []);
+        console.log("Valid records after filter:", validData.length);
+        // Cek unique NISN dan dates (tetap jika ingin debug)
+        const uniqueNISN = new Set(
+          validData.map((r) => String(r.nisn || "").trim())
+        );
+        console.log("Unique NISN in attendance data:", Array.from(uniqueNISN));
+        const uniqueDates = new Set(validData.map((r) => r.tanggal));
+        console.log("Unique dates:", Array.from(uniqueDates).sort());
+        setAttendanceData(validData);
+      } else {
+        alert("❌ Gagal memuat data absensi: " + data.message);
+        setAttendanceData([]);
+      }
+    } catch (error) {
+      console.error("Error fetch:", error);
+      alert("❌ Gagal memuat data absensi. Cek console untuk detail.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Hitung hari Minggu di bulan terpilih
+  useEffect(() => {
+    const sundays = new Set<number>();
+    for (let day = 1; day <= daysInMonth; day++) {
+      if (isSunday(day)) {
+        sundays.add(day);
+      }
+    }
+    setSundayDays(sundays);
+  }, [selectedMonth, selectedYear, daysInMonth]);
+
+  useEffect(() => {
+    fetch(`${endpoint}?action=schoolData`)
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+        return res.json();
+      })
+      .then((data) => {
+        if (data.success && data.data && data.data.length > 0) {
+          setSchoolData(data.data[0]);
+        } else {
+          setSchoolData(null);
+        }
+      })
+      .catch((error) => {
+        console.error("Error fetching school data:", error);
+        alert("❌ Gagal memuat data sekolah. Cek console untuk detail.");
+      });
+  }, []); // Fetch sekali saat mount
+
+  useEffect(() => {
+    setLoading(true);
+    fetch(`${endpoint}?action=attendanceHistory`)
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+        return res.json();
+      })
+      .then((data) => {
+        if (data.success) {
+          console.log("=== RAW DATA FROM SERVER ===");
+          console.log("Total records:", data.data.length);
+
+          // Log sample data
+          if (data.data.length > 0) {
+            console.log("Sample records (first 5):");
+            data.data.slice(0, 5).forEach((record: any, index: number) => {
+              console.log(`Record ${index}:`, {
+                tanggal: record.tanggal,
+                nama: record.nama,
+                kelas: record.kelas,
+                nisn: record.nisn,
+                status: record.status,
+              });
+            });
+          }
+
+          // Filter data yang valid
+          const validData = filterValidAttendance(data.data || []);
+          console.log("Valid records after filter:", validData.length);
+
+          // Cek unique NISN dalam data
+          const uniqueNISN = new Set(
+            validData.map((r) => String(r.nisn || "").trim())
+          );
+          console.log(
+            "Unique NISN in attendance data:",
+            Array.from(uniqueNISN)
+          );
+
+          // Cek unique tanggal
+          const uniqueDates = new Set(validData.map((r) => r.tanggal));
+          console.log("Unique dates:", Array.from(uniqueDates).sort());
+
+          setAttendanceData(validData);
+        } else {
+          alert("❌ Gagal memuat data absensi: " + data.message);
+          setAttendanceData([]);
+        }
+        setLoading(false);
+      })
+      .catch((error) => {
+        console.error("Error fetch:", error);
+        alert("❌ Gagal memuat data absensi. Cek console untuk detail.");
+        setLoading(false);
+      });
+  }, []);
+
+  // Fetch tanggal merah
+  useEffect(() => {
+    fetchTanggalMerah();
+  }, []);
+
+  const fetchTanggalMerah = async () => {
+    setLoadingTanggalMerah(true);
+    try {
+      const res = await fetch(`${endpoint}?action=tanggalMerah`);
+      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+      const data = await res.json();
+      if (data.success) {
+        console.log("Tanggal merah loaded:", data.data);
+        setTanggalMerahList(data.data || []);
+      } else {
+        console.error("Gagal memuat tanggal merah:", data.message);
+        setTanggalMerahList([]);
+      }
+    } catch (error) {
+      console.error("Error fetch tanggal merah:", error);
+    } finally {
+      setLoadingTanggalMerah(false);
+    }
+  };
+
+  // Filter tanggal merah berdasarkan bulan dan tahun yang dipilih
+  useEffect(() => {
+    const filtered = tanggalMerahList.filter((tm) => {
+      const [dayStart, monthStart, yearStart] = tm.tanggal
+        .split("/")
+        .map(Number);
+
+      // Jika tidak ada tanggal akhir, cek hanya tanggal mulai
+      if (!tm.tanggalAkhir) {
+        return monthStart === selectedMonth && yearStart === selectedYear;
+      }
+
+      // Jika ada tanggal akhir, cek apakah rentang mencakup bulan yang dipilih
+      const [dayEnd, monthEnd, yearEnd] = tm.tanggalAkhir
+        .split("/")
+        .map(Number);
+
+      const startDate = new Date(yearStart, monthStart - 1, dayStart);
+      const endDate = new Date(yearEnd, monthEnd - 1, dayEnd);
+      const currentMonthStart = new Date(selectedYear, selectedMonth - 1, 1);
+      const currentMonthEnd = new Date(selectedYear, selectedMonth, 0); // Last day of month
+
+      // Cek apakah rentang tanggal merah overlap dengan bulan yang dipilih
+      return startDate <= currentMonthEnd && endDate >= currentMonthStart;
+    });
+    setFilteredTanggalMerah(filtered);
+  }, [tanggalMerahList, selectedMonth, selectedYear]);
+
+  const fetchJadwalMengajar = async () => {
+    setLoadingJadwal(true);
+    try {
+      const res = await fetch(`${endpoint}?action=jadwalMengajar`);
+      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+      const data = await res.json();
+      if (data.success) {
+        console.log("Jadwal mengajar loaded:", data.data);
+        setJadwalMengajar(data.data || []);
+      } else {
+        console.error("Gagal memuat jadwal mengajar:", data.message);
+        setJadwalMengajar([]);
+      }
+    } catch (error) {
+      console.error("Error fetch jadwal mengajar:", error);
+    } finally {
+      setLoadingJadwal(false);
+    }
+  };
+
+  const isJadwalMengajar = (day: number): boolean => {
+    // Jika guru kelas, semua hari adalah jadwal mengajar
+    if (schoolData?.statusGuru === "Guru Kelas") {
+      return true;
+    }
+
+    // Jika "Semua" dipilih, tidak bisa tentukan jadwal spesifik
+    if (selectedKelas === "Semua") {
+      return false; // ← UBAH dari true ke false
+    }
+
+    // Cari jadwal untuk kelas yang dipilih
+    const jadwal = jadwalMengajar.find((j) => j.kelas === selectedKelas);
+
+    if (!jadwal) {
+      // Jika tidak ada jadwal untuk kelas ini, anggap semua hari bukan jadwal
+      return false;
+    }
+
+    // Dapatkan nama hari dari tanggal
+    const date = new Date(selectedYear, selectedMonth - 1, day);
+    const dayNames = [
+      "Minggu",
+      "Senin",
+      "Selasa",
+      "Rabu",
+      "Kamis",
+      "Jumat",
+      "Sabtu",
+    ];
+    const dayName = dayNames[date.getDay()];
+
+    // Split hari dari jadwal dan trim setiap item
+    const hariJadwal = jadwal.hari
+      .split(",")
+      .map((h) => h.trim())
+      .filter((h) => h.length > 0);
+
+    // Debug log
+    console.log(`Day ${day} (${dayName}):`, {
+      jadwalHari: hariJadwal,
+      isMatch: hariJadwal.includes(dayName),
+    });
+
+    return hariJadwal.includes(dayName);
+  };
+
+  const isBukanJadwalMengajar = (day: number): boolean => {
+    // Jika guru kelas, tidak ada yang bukan jadwal
+    if (schoolData?.statusGuru === "Guru Kelas") {
+      return false;
+    }
+
+    // Jika "Semua" dipilih, tidak tampilkan sebagai bukan jadwal
+    if (selectedKelas === "Semua") {
+      return false;
+    }
+
+    const isSundayDay = isSunday(day);
+    const isTglMerah = isTanggalMerah(day);
+    const isLiburSem = isLiburSemester(day);
+    const isJadwal = isJadwalMengajar(day);
+
+    // ✅ PERBAIKAN: Bukan jadwal mengajar jika: bukan minggu, bukan tanggal merah,
+    // bukan libur semester, DAN bukan jadwal
+    return !isSundayDay && !isTglMerah && !isLiburSem && !isJadwal;
+  };
+
+  // Fetch jadwal mengajar - PRIORITAS TINGGI
+  useEffect(() => {
+    fetchJadwalMengajar();
+  }, []); // Fetch sekali saat mount
+
+  // Fetch attendance data - setelah jadwal ter-load
+  useEffect(() => {
+    if (loadingJadwal) return; // Tunggu jadwal selesai di-load
+    fetchAttendanceData();
+  }, [loadingJadwal]); // Dependency: tunggu loading jadwal selesai
+
+  const isInDateRange = (
+    day: number,
+    startDate: string,
+    endDate?: string
+  ): boolean => {
+    const currentDate = `${String(day).padStart(2, "0")}/${String(
+      selectedMonth
+    ).padStart(2, "0")}/${selectedYear}`;
+
+    if (!endDate) {
+      return currentDate === startDate;
+    }
+
+    // Parse dates
+    const [d1, m1, y1] = startDate.split("/").map(Number);
+    const [d2, m2, y2] = endDate.split("/").map(Number);
+    const [dC, mC, yC] = currentDate.split("/").map(Number);
+
+    const start = new Date(y1, m1 - 1, d1);
+    const end = new Date(y2, m2 - 1, d2);
+    const current = new Date(yC, mC - 1, dC);
+
+    return current >= start && current <= end;
+  };
+
+  // Helper function to check if a date is a tanggal merah
+  const isTanggalMerah = (day: number): boolean => {
+    return tanggalMerahList.some((tm) => {
+      const isNotLiburSemester = !(
+        tm.deskripsi.toLowerCase().includes("libur akhir semester") ||
+        tm.deskripsi.toLowerCase().includes("libur semester")
+      );
+
+      if (!isNotLiburSemester) return false;
+
+      return isInDateRange(day, tm.tanggal, tm.tanggalAkhir);
+    });
+  };
+
+  // Helper function to check if a date is libur semester
+  const isLiburSemester = (day: number): boolean => {
+    return tanggalMerahList.some((tm) => {
+      const isLibur =
+        tm.deskripsi.toLowerCase().includes("libur akhir semester") ||
+        tm.deskripsi.toLowerCase().includes("libur semester");
+
+      if (!isLibur) return false;
+
+      return isInDateRange(day, tm.tanggal, tm.tanggalAkhir);
+    });
+  };
+
+  // Helper function to get deskripsi for libur semester
+  const getLiburSemesterDeskripsi = (day: number): string => {
+    const dateStr = `${String(day).padStart(2, "0")}/${String(
+      selectedMonth
+    ).padStart(2, "0")}/${selectedYear}`;
+
+    const found = tanggalMerahList.find((tm) => tm.tanggal === dateStr);
+    return found ? found.deskripsi : "";
+  };
+
+  // Helper function to get deskripsi for a tanggal merah
+  const getTanggalMerahDeskripsi = (day: number): string => {
+    const dateStr = `${String(day).padStart(2, "0")}/${String(
+      selectedMonth
+    ).padStart(2, "0")}/${selectedYear}`;
+
+    const found = tanggalMerahList.find((tm) => tm.tanggal === dateStr);
+    return found ? found.deskripsi : "";
+  };
+
+  // Filter data absensi yang valid (tidak ada formula atau error)
+  const filterValidAttendance = (
+    data: AttendanceHistory[]
+  ): AttendanceHistory[] => {
+    return data.filter((record) => {
+      const hasValidTanggal =
+        record.tanggal &&
+        !record.tanggal.toString().startsWith("=") &&
+        /^\d{2}\/\d{2}\/\d{4}$/.test(record.tanggal.toString());
+
+      const hasValidNama =
+        record.nama &&
+        !record.nama.toString().startsWith("=") &&
+        record.nama.toString().trim() !== "";
+
+      const hasValidNisn =
+        record.nisn &&
+        !record.nisn.toString().startsWith("=") &&
+        record.nisn.toString().trim() !== "";
+
+      const hasValidStatus =
+        record.status &&
+        ["Hadir", "Izin", "Sakit", "Alpha"].includes(record.status.toString());
+
+      return hasValidTanggal && hasValidNama && hasValidNisn && hasValidStatus;
+    });
+  };
+
+  const getAttendanceByDate = () => {
+    return attendanceByDateMemo; // Gunakan yang sudah di-memoize
+  };
+
+  const getTotalSummary = () => {
+    let totalH = 0,
+      totalS = 0,
+      totalI = 0,
+      totalA = 0;
+
+    filteredStudents.forEach((student) => {
+      const { counts } = getAttendanceForStudent(student);
+      totalH += counts.H;
+      totalS += counts.S;
+      totalI += counts.I;
+      totalA += counts.A;
+    });
+
+    const grandTotal = totalH + totalS + totalI + totalA;
+
+    return {
+      totalH,
+      totalS,
+      totalI,
+      totalA,
+      grandTotal,
+      percentH: grandTotal > 0 ? ((totalH / grandTotal) * 100).toFixed(0) : "0",
+      percentS: grandTotal > 0 ? ((totalS / grandTotal) * 100).toFixed(0) : "0",
+      percentI: grandTotal > 0 ? ((totalI / grandTotal) * 100).toFixed(0) : "0",
+      percentA: grandTotal > 0 ? ((totalA / grandTotal) * 100).toFixed(0) : "0",
+    };
+  };
+
+  const getGenderSummary = () => {
+    let totalLakiLaki = 0;
+    let totalPerempuan = 0;
+
+    filteredStudents.forEach((student) => {
+      const jenisKelamin = String(student.jenisKelamin || "")
+        .trim()
+        .toUpperCase();
+      if (jenisKelamin === "L" || jenisKelamin === "LAKI-LAKI") {
+        totalLakiLaki++;
+      } else if (jenisKelamin === "P" || jenisKelamin === "PEREMPUAN") {
+        totalPerempuan++;
+      }
+    });
+
+    return {
+      lakiLaki: totalLakiLaki,
+      perempuan: totalPerempuan,
+      total: totalLakiLaki + totalPerempuan,
+    };
+  };
+
+  const getHariEfektif = () => {
+    let hariEfektif = 0;
+
+    for (let day = 1; day <= daysInMonth; day++) {
+      const isSundayDay = isSunday(day);
+      const isTglMerah = isTanggalMerah(day);
+      const isLiburSem = isLiburSemester(day);
+      const isBukanJadwal = isBukanJadwalMengajar(day);
+
+      // Hitung hanya hari yang tidak merah, minggu, atau libur semester
+      if (!isSundayDay && !isTglMerah && !isLiburSem && !isBukanJadwal) {
+        hariEfektif++;
+      }
+    }
+
+    return hariEfektif;
+  };
+
+  const handleStatusChange = (
+    student: Student,
+    day: number,
+    newStatus: AttendanceStatus | ""
+  ) => {
+    console.log(`\n=== Status Change ===`);
+    console.log("Student:", student.name);
+    console.log("Day:", day);
+    console.log("New Status:", newStatus);
+    console.log("Current editedRecords:", editedRecords);
+
+    const key = `${student.id}_${day}`;
+    const dateStr = `${String(day).padStart(2, "0")}/${String(
+      selectedMonth
+    ).padStart(2, "0")}/${selectedYear}`;
+
+    if (newStatus === "") {
+      // Cek apakah ada data asli dari attendanceData
+      const hasOriginalData = attendanceData.some((record) => {
+        const studentNisn = String(student.nisn || "")
+          .trim()
+          .replace(/\s+/g, "")
+          .toUpperCase();
+        const studentNama = String(student.name || "")
+          .trim()
+          .toLowerCase();
+        const recordNisn = String(record.nisn || "")
+          .trim()
+          .replace(/\s+/g, "")
+          .toUpperCase();
+        const recordNama = String(record.nama || "")
+          .trim()
+          .toLowerCase();
+
+        const isMatch =
+          (studentNisn && recordNisn && studentNisn === recordNisn) ||
+          (studentNama && recordNama && studentNama === recordNama);
+
+        if (isMatch) {
+          const dateParts = record.tanggal.split("/");
+          if (dateParts.length === 3) {
+            const recordDay = parseInt(dateParts[0], 10);
+            const recordMonth = parseInt(dateParts[1], 10);
+            const recordYear = parseInt(dateParts[2], 10);
+            return (
+              recordDay === day &&
+              recordMonth === selectedMonth &&
+              recordYear === selectedYear
+            );
+          }
+        }
+        return false;
+      });
+
+      if (hasOriginalData) {
+        // Jika ada data asli, tandai untuk dihapus dengan status kosong
+        setEditedRecords((prev) => ({
+          ...prev,
+          [key]: {
+            date: dateStr,
+            nisn: String(student.nisn || ""),
+            status: "", // Status kosong = hapus
+          },
+        }));
+      } else {
+        // Jika tidak ada data asli, hapus dari editedRecords
+        setEditedRecords((prev) => {
+          const newRecords = { ...prev };
+          delete newRecords[key];
+          console.log("Removed from editedRecords. New state:", newRecords);
+          return newRecords;
+        });
+      }
+    } else {
+      // Tambah/update di editedRecords
+      const newRecord = {
+        date: dateStr,
+        nisn: String(student.nisn || ""),
+        status: newStatus,
+      };
+
+      setEditedRecords((prev) => {
+        const newRecords = {
+          ...prev,
+          [key]: newRecord,
+        };
+        console.log("Updated editedRecords. New state:", newRecords);
+        return newRecords;
+      });
+    }
+  };
+
+  const handleSaveChanges = () => {
+    if (Object.keys(editedRecords).length === 0) {
+      alert("⚠️ Tidak ada perubahan untuk disimpan.");
+      return;
+    }
+
+    setIsSaving(true);
+    const updates = Object.values(editedRecords).map((record) => ({
+      tanggal: record.date,
+      nisn: record.nisn,
+      status: record.status,
+    }));
+
+    fetch(endpoint, {
+      method: "POST",
+      mode: "no-cors",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: "bulkUpdateAttendance",
+        updates,
+      }),
+    })
+      .then(() => {
+        alert("✅ Perubahan berhasil disimpan!");
+        setEditedRecords({});
+        // Update data absensi secara dinamis tanpa reload halaman
+        fetchAttendanceData();
+      })
+      .catch(() => alert("❌ Gagal menyimpan perubahan."))
+      .finally(() => setIsSaving(false));
+  };
+
+  const handleDeleteStudentAttendance = async (student: Student) => {
+    const confirmMessage = `⚠️ PERINGATAN!\n\nAnda akan menghapus SEMUA riwayat absensi untuk:\n\nNama: ${
+      student.name
+    }\nNISN: ${student.nisn}\nKelas: ${
+      student.kelas
+    }\n\nData yang akan dihapus:\n- Semua riwayat kehadiran di bulan ${
+      months.find((m) => m.value === selectedMonth)?.label
+    } ${selectedYear}\n- Data di sheet "Absensi" di Google Sheets\n\nTindakan ini TIDAK DAPAT DIBATALKAN!\n\nApakah Anda yakin?`;
+
+    if (!confirm(confirmMessage)) {
+      return;
+    }
+
+    setDeletingStudentId(student.id);
+
+    try {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        mode: "no-cors",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "deleteStudentAttendanceByName",
+          nama: student.name,
+          bulan: selectedMonth,
+          tahun: selectedYear,
+        }),
+      });
+
+      alert(`✅ Riwayat absensi ${student.name} berhasil dihapus!`);
+
+      // Hapus data dari state lokal
+      setAttendanceData((prev) =>
+        prev.filter((record) => record.nama !== student.name)
+      );
+
+      // Hapus editedRecords untuk siswa ini
+      setEditedRecords((prev) => {
+        const newRecords = { ...prev };
+        Object.keys(newRecords).forEach((key) => {
+          if (key.startsWith(`${student.id}_`)) {
+            delete newRecords[key];
+          }
+        });
+        return newRecords;
+      });
+
+      // Refresh data dari server
+      fetchAttendanceData();
+    } catch (error) {
+      console.error("Error deleting student attendance:", error);
+      alert("❌ Gagal menghapus riwayat absensi. Silakan coba lagi.");
+    } finally {
+      setDeletingStudentId(null);
+    }
+  };
+
+  const handleDeleteAllAttendance = () => {
+    const monthLabel =
+      months.find((m) => m.value === selectedMonth)?.label || "";
+    const kelasLabel =
+      selectedKelas === "Semua" ? "semua kelas" : `kelas ${selectedKelas}`;
+
+    if (
+      confirm(
+        `Yakin ingin menghapus semua data absensi ${kelasLabel} di bulan ${monthLabel} ${selectedYear}?\n\nTindakan ini tidak dapat dibatalkan!`
+      )
+    ) {
+      setIsDeleting(true);
+      fetch(endpoint, {
+        method: "POST",
+        mode: "no-cors",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "deleteAttendanceByFilter",
+          kelas: selectedKelas === "Semua" ? "" : selectedKelas,
+          bulan: selectedMonth,
+          tahun: selectedYear,
+        }),
+      })
+        .then(() => {
+          alert(
+            `✅ Data absensi ${kelasLabel} di bulan ${monthLabel} ${selectedYear} berhasil dihapus.`
+          );
+          setAttendanceData([]);
+          setEditedRecords({});
+          fetchAttendanceData();
+        })
+        .catch(() =>
+          alert(
+            `❌ Gagal menghapus data absensi ${kelasLabel} di bulan ${monthLabel} ${selectedYear}.`
+          )
+        )
+        .finally(() => setIsDeleting(false));
+    }
+  };
+
+  const downloadPDF = async () => {
+    const doc = new jsPDF({
+      orientation: "landscape",
+      unit: "mm",
+      format: "legal", // Legal: 215.9 x 355.6 mm
+    });
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const margin = 14;
+    const lineSpacing = 5;
+    let currentY = margin;
+
+    doc.setFont("Times", "roman");
+
+    // Title - 1 baris saja
+    const monthLabel =
+      months.find((m) => m.value === selectedMonth)?.label || "";
+    const namaSekolah = schoolData?.namaSekolah || "UPT SDN 13 BATANG";
+
+    // Hitung posisi tengah tabel (bukan tengah kertas)
+    const tableStartX = margin - 7; // Sesuaikan dengan margin tabel Anda
+    const mainTableWidth = pageWidth - 2 * margin; // Lebar total tabel utama
+    const tableCenterX = tableStartX + mainTableWidth / 2;
+
+    // Judul dalam 1 baris
+    const title = `DAFTAR HADIR SISWA KELAS ${selectedKelas}  ${namaSekolah}  ${monthLabel.toUpperCase()} ${selectedYear}`;
+
+    doc.setFontSize(12); // Ukuran font lebih kecil agar muat 1 baris
+    doc.setFont("Times", "bold");
+    doc.text(title, tableCenterX, currentY, { align: "center" });
+
+    currentY += 10; // Spacing setelah judul (1 baris saja)
+
+    // TAMBAHKAN helper function untuk cek rentang tanggal di dalam downloadPDF
+    const isInDateRangePDF = (
+      day: number,
+      startDate: string,
+      endDate?: string
+    ): boolean => {
+      const currentDate = `${String(day).padStart(2, "0")}/${String(
+        selectedMonth
+      ).padStart(2, "0")}/${selectedYear}`;
+
+      if (!endDate) {
+        return currentDate === startDate;
+      }
+
+      // Parse dates
+      const [d1, m1, y1] = startDate.split("/").map(Number);
+      const [d2, m2, y2] = endDate.split("/").map(Number);
+      const [dC, mC, yC] = currentDate.split("/").map(Number);
+
+      const start = new Date(y1, m1 - 1, d1);
+      const end = new Date(y2, m2 - 1, d2);
+      const current = new Date(yC, mC - 1, dC);
+
+      return current >= start && current <= end;
+    };
+
+    // TAMBAHKAN helper untuk cek libur semester di PDF
+    const isLiburSemesterPDF = (day: number): boolean => {
+      return tanggalMerahList.some((tm) => {
+        const isLibur =
+          tm.deskripsi.toLowerCase().includes("libur akhir semester") ||
+          tm.deskripsi.toLowerCase().includes("libur semester");
+
+        if (!isLibur) return false;
+
+        return isInDateRangePDF(day, tm.tanggal, tm.tanggalAkhir);
+      });
+    };
+
+    // TAMBAHKAN helper untuk cek tanggal merah biasa di PDF
+    const isTanggalMerahPDF = (day: number): boolean => {
+      return tanggalMerahList.some((tm) => {
+        const isNotLiburSemester = !(
+          tm.deskripsi.toLowerCase().includes("libur akhir semester") ||
+          tm.deskripsi.toLowerCase().includes("libur semester")
+        );
+
+        if (!isNotLiburSemester) return false;
+
+        return isInDateRangePDF(day, tm.tanggal, tm.tanggalAkhir);
+      });
+    };
+
+    // Headers
+    const headers = [
+      [
+        { content: "No", rowSpan: 2 },
+        { content: "NISN", rowSpan: 2 },
+        { content: "NAMA", rowSpan: 2 },
+        { content: "L/P", rowSpan: 2 },
+        ...Array.from({ length: daysInMonth }, (_, i) => ({
+          content: (i + 1).toString(),
+          rowSpan: 2,
+        })),
+        {
+          content: "JUMLAH",
+          colSpan: 4,
+          styles: { halign: "center" as const },
+        },
+      ],
+      ["H", "S", "I", "A"],
+    ];
+
+    // Body data untuk siswa
+    const body = filteredStudents.map((student, index) => {
+      const cached = studentAttendanceMap.get(student.id);
+      if (!cached) return [];
+
+      const { attendance, counts } = cached;
+
+      // ========== TAMBAHKAN KODE BARU INI ==========
+      const jenisKelamin =
+        student.jenisKelamin === "L" || student.jenisKelamin === "LAKI-LAKI"
+          ? "L"
+          : student.jenisKelamin === "P" || student.jenisKelamin === "PEREMPUAN"
+          ? "P"
+          : "-";
+      // ========== AKHIR KODE BARU ==========
+
+      return [
+        index + 1,
+        student.nisn || "N/A",
+        student.name || "N/A",
+        jenisKelamin,
+        ...Array.from(
+          { length: daysInMonth },
+          (_, day) => attendance[day + 1] || "-"
+        ),
+        counts.H,
+        counts.S,
+        counts.I,
+        counts.A,
+      ];
+    });
+
+    // Setelah baris percentRow, tambahkan:
+    const totalSummary = getTotalSummary();
+
+    const totalRow = [
+      {
+        content: "TOTAL",
+        colSpan: 4 + daysInMonth, // ← UBAH: Gabungkan dari No, NISN, Nama, L/P sampai tanggal terakhir
+        styles: { halign: "center" as const, fontStyle: "bold" as const },
+      },
+      totalSummary.totalH,
+      totalSummary.totalS,
+      totalSummary.totalI,
+      totalSummary.totalA,
+    ];
+
+    const percentTotalRow = [
+      {
+        content: "PERSENTASE BULANAN",
+        colSpan: 4 + daysInMonth, // ← UBAH: Gabungkan dari No, NISN, Nama, L/P sampai tanggal terakhir
+        styles: { halign: "center" as const, fontStyle: "bold" as const },
+      },
+      `${totalSummary.percentH}%`,
+      `${totalSummary.percentS}%`,
+      `${totalSummary.percentI}%`,
+      `${totalSummary.percentA}%`,
+    ];
+
+    // Hitung jumlah hadir per tanggal
+    const attendanceByDate = getAttendanceByDate();
+
+    // Baris Jumlah Hadir
+    const jumlahHadirRow = [
+      {
+        content: "Jumlah Hadir",
+        colSpan: 4,
+        styles: { halign: "center" as const, fontStyle: "bold" as const },
+      },
+      ...Array.from({ length: daysInMonth }, (_, day) => {
+        const dayNum = day + 1;
+        const stats = attendanceByDate[dayNum] || { hadir: 0, total: 0 };
+        return stats.total > 0 ? stats.hadir : "";
+      }),
+      "-",
+      "-",
+      "-",
+      "-",
+    ];
+
+    const persenHadirRow = [
+      {
+        content: "% Hadir",
+        colSpan: 4,
+        styles: { halign: "center" as const, fontStyle: "bold" as const },
+      },
+      ...Array.from({ length: daysInMonth }, (_, day) => {
+        const dayNum = day + 1;
+        const stats = attendanceByDate[dayNum] || { hadir: 0, total: 0 };
+        const percentage =
+          stats.total > 0
+            ? ((stats.hadir / stats.total) * 100).toFixed(0) + "%"
+            : "";
+        return percentage;
+      }),
+      "-",
+      "-",
+      "-",
+      "-",
+    ];
+
+    // Hitung hari efektif untuk PDF (sama seperti di tabel)
+    let hariEfektifPDF = 0;
+    for (let day = 1; day <= daysInMonth; day++) {
+      const isSundayDay = isSunday(day);
+      const isTglMerah = isTanggalMerahPDF(day);
+      const isLiburSem = isLiburSemesterPDF(day);
+      const isBukanJadwal = isBukanJadwalMengajar(day); // ✅ TAMBAHKAN
+
+      // ✅ TAMBAHKAN && !isBukanJadwal
+      if (!isSundayDay && !isTglMerah && !isLiburSem && !isBukanJadwal) {
+        hariEfektifPDF++;
+      }
+    }
+
+    const hariEfektifRow = [
+      {
+        content: "HARI EFEKTIF",
+        colSpan: 4 + daysInMonth,
+        styles: { halign: "center" as const, fontStyle: "bold" as const },
+      },
+      {
+        content: `${hariEfektifPDF} Hari`,
+        colSpan: 4,
+        styles: { halign: "center" as const, fontStyle: "bold" as const },
+      },
+    ];
+
+    // Render tabel dengan baris tambahan
+    autoTable(doc, {
+      head: headers,
+      body: [
+        ...body,
+        jumlahHadirRow,
+        persenHadirRow,
+        totalRow,
+        percentTotalRow,
+        hariEfektifRow,
+      ],
+      startY: currentY,
+      showHead: "firstPage",
+      margin: { left: 8, right: 8 },
+      theme: "grid",
+
+      styles: {
+        font: "Times",
+        fontSize: 7,
+        cellPadding: 1.5,
+        halign: "center",
+        valign: "middle",
+      },
+      headStyles: {
+        fillColor: [255, 255, 0],
+        textColor: [0, 0, 0],
+        fontStyle: "bold",
+        fontSize: 7,
+        halign: "center",
+        valign: "middle",
+      },
+      alternateRowStyles: { fillColor: [240, 240, 240] },
+
+      columnStyles: {
+        0: { cellWidth: 7, halign: "center" }, // No
+        1: { cellWidth: 16, halign: "center" }, // NISN
+        2: { cellWidth: 60, halign: "left" }, // Nama
+        3: { cellWidth: 8, halign: "center" },
+        ...Object.assign(
+          {},
+          ...Array.from({ length: daysInMonth }, (_, i) => ({
+            [i + 4]: { cellWidth: 6, halign: "center" },
+          }))
+        ),
+        [4 + daysInMonth]: { cellWidth: 10, halign: "center" },
+        [5 + daysInMonth]: { cellWidth: 10, halign: "center" },
+        [6 + daysInMonth]: { cellWidth: 10, halign: "center" },
+        [7 + daysInMonth]: { cellWidth: 10, halign: "center" },
+      },
+      didParseCell: function (data) {
+        // Styling khusus untuk baris "Jumlah Hadir" dan "% Hadir"
+        if (data.row.index >= body.length) {
+          data.cell.styles.fillColor =
+            data.row.index === body.length ? [219, 234, 254] : [220, 252, 231];
+          data.cell.styles.fontStyle = "bold";
+        }
+
+        // Styling untuk kolom tanggal di HEADER
+        if (
+          data.row.section === "head" &&
+          data.column.index >= 4 &&
+          data.column.index < 4 + daysInMonth
+        ) {
+          const dayNum = data.column.index - 3;
+
+          const date = new Date(selectedYear, selectedMonth - 1, dayNum);
+          const isSundayDay = date.getDay() === 0;
+
+          // UBAH: Gunakan helper function yang baru
+          const isTglMerah = isTanggalMerahPDF(dayNum);
+          const isLiburSem = isLiburSemesterPDF(dayNum);
+          const isBukanJadwal = isBukanJadwalMengajar(dayNum);
+
+          // TAMBAHKAN helper function di awal downloadPDF
+          const hexToRgb = (hex: string): [number, number, number] => {
+            const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(
+              hex
+            );
+            return result
+              ? [
+                  parseInt(result[1], 16),
+                  parseInt(result[2], 16),
+                  parseInt(result[3], 16),
+                ]
+              : [255, 255, 255];
+          };
+
+          // Kemudian gunakan di didParseCell:
+          if (isSundayDay) {
+            data.cell.styles.fillColor = hexToRgb(customColors.hariMinggu);
+            data.cell.styles.textColor = [255, 255, 255];
+            data.cell.styles.fontStyle = "bold";
+          } else if (isLiburSem) {
+            data.cell.styles.fillColor = hexToRgb(customColors.liburSemester);
+            data.cell.styles.textColor = [255, 255, 255];
+            data.cell.styles.fontStyle = "bold";
+          } else if (isTglMerah) {
+            data.cell.styles.fillColor = hexToRgb(customColors.tanggalMerah);
+            data.cell.styles.textColor = [0, 0, 0];
+            data.cell.styles.fontStyle = "bold";
+          } else if (isBukanJadwal) {
+            data.cell.styles.fillColor = hexToRgb(customColors.bukanJadwal);
+            data.cell.styles.textColor = [0, 0, 0];
+            data.cell.styles.fontStyle = "bold";
+          }
+        }
+
+        // Styling untuk cell data siswa di BODY
+        if (
+          data.row.section === "body" &&
+          data.row.index < body.length &&
+          data.column.index >= 4 &&
+          data.column.index < 4 + daysInMonth
+        ) {
+          const dayNum = data.column.index - 3;
+
+          const date = new Date(selectedYear, selectedMonth - 1, dayNum);
+          const isSundayDay = date.getDay() === 0;
+
+          // UBAH: Gunakan helper function yang baru
+          const isTglMerah = isTanggalMerahPDF(dayNum);
+          const isLiburSem = isLiburSemesterPDF(dayNum);
+          const isBukanJadwal = isBukanJadwalMengajar(dayNum);
+
+          // TAMBAHKAN helper function di awal downloadPDF
+          const hexToRgb = (hex: string): [number, number, number] => {
+            const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(
+              hex
+            );
+            return result
+              ? [
+                  parseInt(result[1], 16),
+                  parseInt(result[2], 16),
+                  parseInt(result[3], 16),
+                ]
+              : [255, 255, 255];
+          };
+
+          // Kemudian gunakan di didParseCell:
+          if (isSundayDay) {
+            data.cell.styles.fillColor = hexToRgb(customColors.hariMinggu);
+            data.cell.styles.textColor = [255, 255, 255];
+            data.cell.styles.fontStyle = "bold";
+          } else if (isLiburSem) {
+            data.cell.styles.fillColor = hexToRgb(customColors.liburSemester);
+            data.cell.styles.textColor = [255, 255, 255];
+            data.cell.styles.fontStyle = "bold";
+          } else if (isTglMerah) {
+            data.cell.styles.fillColor = hexToRgb(customColors.tanggalMerah);
+            data.cell.styles.textColor = [0, 0, 0];
+            data.cell.styles.fontStyle = "bold";
+          } else if (isBukanJadwal) {
+            data.cell.styles.fillColor = hexToRgb(customColors.bukanJadwal);
+            data.cell.styles.textColor = [0, 0, 0];
+            data.cell.styles.fontStyle = "bold";
+          }
+        }
+
+        // Styling untuk footer rows pada tanggal merah
+        if (
+          data.row.section === "body" &&
+          data.row.index >= body.length &&
+          data.column.index >= 4 &&
+          data.column.index < 4 + daysInMonth
+        ) {
+          const dayNum = data.column.index - 3;
+
+          const date = new Date(selectedYear, selectedMonth - 1, dayNum);
+          const isSundayDay = date.getDay() === 0;
+
+          // UBAH: Gunakan helper function yang baru
+          const isTglMerah = isTanggalMerahPDF(dayNum);
+          const isLiburSem = isLiburSemesterPDF(dayNum);
+          const isBukanJadwal = isBukanJadwalMengajar(dayNum);
+
+          // TAMBAHKAN helper function di awal downloadPDF
+          const hexToRgb = (hex: string): [number, number, number] => {
+            const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(
+              hex
+            );
+            return result
+              ? [
+                  parseInt(result[1], 16),
+                  parseInt(result[2], 16),
+                  parseInt(result[3], 16),
+                ]
+              : [255, 255, 255];
+          };
+
+          // Kemudian gunakan di didParseCell:
+          if (isSundayDay) {
+            data.cell.styles.fillColor = hexToRgb(customColors.hariMinggu);
+            data.cell.styles.textColor = [255, 255, 255];
+            data.cell.styles.fontStyle = "bold";
+          } else if (isLiburSem) {
+            data.cell.styles.fillColor = hexToRgb(customColors.liburSemester);
+            data.cell.styles.textColor = [255, 255, 255];
+            data.cell.styles.fontStyle = "bold";
+          } else if (isTglMerah) {
+            data.cell.styles.fillColor = hexToRgb(customColors.tanggalMerah);
+            data.cell.styles.textColor = [0, 0, 0];
+            data.cell.styles.fontStyle = "bold";
+          } else if (isBukanJadwal) {
+            data.cell.styles.fillColor = hexToRgb(customColors.bukanJadwal);
+            data.cell.styles.textColor = [0, 0, 0];
+            data.cell.styles.fontStyle = "bold";
+          }
+        }
+      },
+    });
+
+    currentY = (doc as any).lastAutoTable.finalY + 8;
+
+    // ✅ PENGECEKAN LEBIH KETAT - Cek apakah footer (tanda tangan) akan terpotong
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const bottomMargin = 20;
+    const spaceNeededForSignatures = 50; // Ruang untuk tanda tangan
+    const spaceNeededForStudentTable = 20; // Ruang untuk tabel jumlah siswa
+    const spaceNeededForTanggalMerahTable =
+      filteredTanggalMerah.length > 0
+        ? 10 + filteredTanggalMerah.length * 7
+        : 0;
+
+    // Total ruang yang dibutuhkan untuk semua footer
+    const totalFooterSpace =
+      spaceNeededForSignatures +
+      spaceNeededForStudentTable +
+      spaceNeededForTanggalMerahTable;
+
+    // ✅ JIKA TIDAK CUKUP RUANG UNTUK SEMUA FOOTER, PINDAH KE HALAMAN BARU
+    if (currentY + totalFooterSpace > pageHeight - bottomMargin) {
+      doc.addPage();
+      currentY = margin;
+    }
+
+    // TABEL JUMLAH SISWA (sekarang dijamin di halaman yang sama dengan tanda tangan)
+    const genderSummary = getGenderSummary();
+
+    doc.setFontSize(10);
+    doc.setFont("Times", "bold");
+    doc.text("JUMLAH SISWA", margin - 7, currentY, {
+      align: "left",
+    });
+    currentY += 3;
+
+    const tableWidth = (pageWidth - 2 * margin) * 0.4;
+
+    autoTable(doc, {
+      head: [["LAKI-LAKI", "PEREMPUAN", "TOTAL SISWA"]],
+      body: [
+        [
+          genderSummary.lakiLaki.toString(),
+          genderSummary.perempuan.toString(),
+          genderSummary.total.toString(),
+        ],
+      ],
+      startY: currentY,
+      margin: { left: margin - 7, right: pageWidth - margin - tableWidth },
+      tableWidth: tableWidth,
+      theme: "grid",
+      styles: {
+        font: "Times",
+        fontSize: 7,
+        cellPadding: 1,
+        halign: "center",
+        valign: "middle",
+        lineWidth: 0.5,
+      },
+      headStyles: {
+        fillColor: [255, 255, 255],
+        textColor: [0, 0, 0],
+        fontStyle: "bold",
+        lineWidth: 1,
+      },
+      bodyStyles: {
+        fillColor: [255, 255, 255],
+        textColor: [0, 0, 0],
+        fontStyle: "bold",
+        fontSize: 10,
+        lineWidth: 1,
+      },
+      columnStyles: {
+        0: {
+          cellWidth: tableWidth / 3,
+          fillColor: [255, 255, 255],
+        },
+        1: {
+          cellWidth: tableWidth / 3,
+          fillColor: [255, 255, 255],
+        },
+        2: {
+          cellWidth: tableWidth / 3,
+          fillColor: [255, 255, 255],
+        },
+      },
+    });
+
+    currentY = (doc as any).lastAutoTable.finalY + 10;
+
+    // TABEL KETERANGAN TANGGAL MERAH (masih di halaman yang sama)
+    if (filteredTanggalMerah.length > 0) {
+      doc.setFontSize(10);
+      doc.setFont("Times", "bold");
+      doc.text("KETERANGAN TANGGAL MERAH / LIBUR", margin - 7, currentY, {
+        align: "left",
+      });
+      currentY += 3;
+
+      const sortedTanggalMerah = [...filteredTanggalMerah].sort((a, b) => {
+        const [dayA, monthA, yearA] = a.tanggal.split("/").map(Number);
+        const [dayB, monthB, yearB] = b.tanggal.split("/").map(Number);
+        return (
+          new Date(yearA, monthA - 1, dayA).getTime() -
+          new Date(yearB, monthB - 1, dayB).getTime()
+        );
+      });
+
+      autoTable(doc, {
+        head: [["TANGGAL", "KETERANGAN"]],
+        body: sortedTanggalMerah.map((tm) => [
+          tm.tanggalAkhir ? `${tm.tanggal} - ${tm.tanggalAkhir}` : tm.tanggal,
+          tm.deskripsi,
+        ]),
+        startY: currentY,
+        margin: { left: margin - 7, right: margin - 7 },
+        theme: "grid",
+        styles: {
+          font: "Times",
+          fontSize: 8,
+          cellPadding: 1.5,
+          valign: "middle",
+          lineWidth: 0.5,
+        },
+        headStyles: {
+          fillColor: [254, 202, 202],
+          textColor: [0, 0, 0],
+          fontStyle: "bold",
+          halign: "center",
+          fontSize: 9,
+          lineWidth: 1,
+        },
+        bodyStyles: {
+          fillColor: [255, 255, 255],
+          textColor: [0, 0, 0],
+          lineWidth: 1,
+        },
+        alternateRowStyles: {
+          fillColor: [254, 226, 226],
+        },
+        columnStyles: {
+          0: {
+            cellWidth: 35,
+            halign: "center",
+            fontSize: 8,
+          },
+          1: {
+            cellWidth: 96,
+            halign: "left",
+            fontSize: 8,
+          },
+        },
+        tableWidth: "auto",
+        didDrawCell: function (data) {
+          if (data.column.index === 1 && data.cell.section === "body") {
+            data.cell.styles.cellWidth = 120;
+          }
+        },
+      });
+
+      currentY = (doc as any).lastAutoTable.finalY + 10;
+    }
+
+    // Footer: School data, place, date, signatures
+    if (schoolData) {
+      doc.setFontSize(10);
+      doc.setFont("Times", "roman");
+
+      const formattedDate = new Date(selectedDate).toLocaleDateString("id-ID", {
+        day: "2-digit",
+        month: "long",
+        year: "numeric",
+      });
+      const placeDateText = `${
+        schoolData.namaKota || "Makassar"
+      }, ${formattedDate}`;
+      const rightColumnX = pageWidth / 2 + 80; // 👈 DIUBAH - posisi guru digeser ke kiri
+      doc.text(placeDateText, rightColumnX + 25, currentY - 1, {
+        align: "center",
+      });
+      currentY += 5;
+
+      const signatureWidth = 30;
+      const signatureHeight = 20;
+      const leftColumnX = margin;
+
+      if (schoolData.ttdKepsek) {
+        try {
+          const canvas = document.createElement("canvas");
+          canvas.width = 150; // Sesuaikan ukuran canvas (lebar lebih besar untuk tanda tangan panjang)
+          canvas.height = 50; // Sesuaikan ukuran canvas (tinggi cukup untuk garis tanda tangan)
+          const ctx = canvas.getContext("2d");
+          const v = await Canvg.from(ctx, schoolData.ttdKepsek); // schoolData.ttdKepsek adalah base64 SVG
+          v.start();
+          const pngData = canvas.toDataURL("image/png");
+          doc.addImage(
+            pngData,
+            "PNG",
+            leftColumnX + 10,
+            currentY - 3,
+            signatureWidth,
+            signatureHeight
+          ); // Sesuaikan posisi sesuai asli
+        } catch (error) {
+          console.error("Error rendering Kepsek signature:", error);
+          doc.setFontSize(10);
+          doc.text(
+            "Gagal render tanda tangan Kepala Sekolah.",
+            leftColumnX + 10,
+            currentY - 3 + 10
+          );
+        }
+      }
+
+      doc.text("Kepala Sekolah,", leftColumnX + 25, currentY - 2, {
+        align: "center",
+      });
+      doc.text("", leftColumnX + 25, currentY + lineSpacing, {
+        align: "center",
+      });
+      doc.text("", leftColumnX + 25, currentY + 2 * lineSpacing, {
+        align: "center",
+      });
+
+      const principalName = schoolData.namaKepsek || "N/A";
+      doc.setFont("Times", "bold");
+      doc.text(principalName, leftColumnX + 25, currentY + 3.5 * lineSpacing, {
+        align: "center",
+      });
+
+      const textWidth = doc.getTextWidth(principalName);
+      const textX = leftColumnX + 25 - textWidth / 2;
+      doc.line(
+        textX,
+        currentY + 3.5 * lineSpacing + 1,
+        textX + textWidth,
+        currentY + 3.5 * lineSpacing + 1
+      );
+
+      doc.setFont("Times", "roman");
+      doc.text(
+        `NIP. ${schoolData.nipKepsek || "N/A"}`,
+        leftColumnX + 25,
+        currentY + 4.5 * lineSpacing,
+        { align: "center" }
+      );
+
+      if (schoolData.ttdGuru) {
+        try {
+          const canvas = document.createElement("canvas");
+          canvas.width = 150; // Sesuaikan ukuran canvas
+          canvas.height = 50;
+          const ctx = canvas.getContext("2d");
+          const v = await Canvg.from(ctx, schoolData.ttdGuru); // schoolData.ttdGuru adalah base64 SVG
+          v.start();
+          const pngData = canvas.toDataURL("image/png");
+          doc.addImage(
+            pngData,
+            "PNG",
+            rightColumnX + 10,
+            currentY - 5,
+            signatureWidth,
+            signatureHeight
+          ); // Sesuaikan posisi sesuai asli
+        } catch (error) {
+          console.error("Error rendering Guru signature:", error);
+          doc.setFontSize(10);
+          doc.text(
+            "Gagal render tanda tangan Guru.",
+            rightColumnX + 10,
+            currentY - 5 + 10
+          );
+        }
+      }
+
+      doc.text(
+        `${schoolData.statusGuru || "Guru Kelas"},`,
+        rightColumnX + 25,
+        currentY - 2,
+        {
+          align: "center",
+        }
+      );
+      doc.text("", rightColumnX + 25, currentY + lineSpacing, {
+        align: "center",
+      });
+      doc.text("", rightColumnX + 25, currentY + 2 * lineSpacing, {
+        align: "center",
+      });
+
+      const teacherName = schoolData.namaGuru || "N/A";
+      doc.setFont("Times", "bold");
+      doc.text(teacherName, rightColumnX + 25, currentY + 3.5 * lineSpacing, {
+        align: "center",
+      });
+
+      const teacherTextWidth = doc.getTextWidth(teacherName);
+      const teacherTextX = rightColumnX + 25 - teacherTextWidth / 2;
+      doc.line(
+        teacherTextX,
+        currentY + 3.5 * lineSpacing + 1,
+        teacherTextX + teacherTextWidth,
+        currentY + 3.5 * lineSpacing + 1
+      );
+
+      doc.setFont("Times", "roman");
+      doc.text(
+        `NIP. ${schoolData.nipGuru || "N/A"}`,
+        rightColumnX + 25,
+        currentY + 4.5 * lineSpacing,
+        { align: "center" }
+      );
+    } else {
+      doc.setFontSize(10);
+      doc.text("Data sekolah tidak tersedia.", margin, currentY);
+    }
+
+    const date = new Date()
+      .toLocaleString("id-ID", {
+        day: "2-digit",
+        month: "long",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      })
+      .replace(/ /g, "_")
+      .replace(/:/g, "-");
+    const fileName = `Daftar_Hadir_${selectedKelas}_${monthLabel}_${selectedYear}_${date}.pdf`;
+    doc.save(fileName);
+  };
+
+  const handleNameClick = (student: Student) => {
+    setSelectedStudent(student);
+    setShowModal(true);
+  };
+
+  const closeModal = () => {
+    setShowModal(false);
+    setSelectedStudent(null);
+  };
+
+  if (loading) {
+    return (
+      <div className="text-center py-8">
+        <p className="text-gray-500">Memuat data...</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-4xl mx-auto" style={{ paddingBottom: "70px" }}>
+      <div className="bg-white p-6 rounded-lg shadow-md">
+        <h2 className="text-2xl font-bold text-center text-blue-700 mb-6">
+          📋 Daftar Hadir Siswa
+        </h2>
+        <div className="mb-6 flex flex-col md:flex-row gap-4 items-center justify-center">
+          <div className="text-center">
+            <p className="text-sm text-gray-500 mb-2">Filter Kelas</p>
+            <select
+              value={selectedKelas}
+              onChange={(e) => setSelectedKelas(e.target.value)}
+              className="border border-gray-300 rounded-lg px-1 py-0.5 shadow-sm bg-white min-w-32"
+            >
+              {uniqueClasses.map((kelas) => (
+                <option key={kelas} value={kelas}>
+                  {kelas}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="text-center">
+            <p className="text-sm text-gray-500 mb-2">Bulan</p>
+            <select
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(Number(e.target.value))}
+              className="border border-gray-300 rounded-lg px-1 py-0.5 shadow-sm bg-white min-w-32"
+            >
+              {months.map((m) => (
+                <option key={m.value} value={m.value}>
+                  {m.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="text-center">
+            <p className="text-sm text-gray-500 mb-2">Tahun</p>
+            <select
+              value={selectedYear}
+              onChange={(e) => setSelectedYear(Number(e.target.value))}
+              className="border border-gray-300 rounded-lg px-1 py-0.5 shadow-sm bg-white min-w-32"
+            >
+              {years.map((y) => (
+                <option key={y} value={y}>
+                  {y}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Separator line and PDF settings section */}
+        <div className="border-t border-gray-200 pt-4 mb-6">
+          <p className="text-center text-sm font-medium text-gray-700 mb-4">
+            Pengaturan Tanggal & Nama Tempat <br /> untuk Daftar Hadir pada File
+            PDF
+          </p>
+          <div className="flex flex-col md:flex-row gap-4 items-center justify-center">
+            <div className="text-center">
+              <p className="text-sm text-gray-500 mb-2">Pilih Tanggal</p>
+              <input
+                type="date"
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                className="border border-gray-300 rounded-lg px-1 py-0.5 shadow-sm bg-white min-w-32"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* ========== SECTION BARU: PENGATURAN WARNA ========== */}
+        <div className="border-t border-gray-200 pt-4 mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <p className="text-sm font-medium text-gray-700">
+              🎨 Pengaturan Warna Tabel
+            </p>
+            <button
+              onClick={() => setShowColorPicker(!showColorPicker)}
+              className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+            >
+              {showColorPicker ? "▲ Sembunyikan" : "▼ Tampilkan"}
+            </button>
+          </div>
+
+          {showColorPicker && (
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-4">
+                {/* Hari Minggu */}
+                <div className="flex flex-col gap-2">
+                  <label className="text-xs font-medium text-gray-700">
+                    Hari Minggu (Disabled)
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="color"
+                      value={customColors.hariMinggu}
+                      onChange={(e) =>
+                        handleColorChange("hariMinggu", e.target.value)
+                      }
+                      className="w-12 h-10 border border-gray-300 rounded cursor-pointer"
+                    />
+                    <span className="text-xs text-gray-600">
+                      {customColors.hariMinggu}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Libur Semester */}
+                <div className="flex flex-col gap-2">
+                  <label className="text-xs font-medium text-gray-700">
+                    Libur Semester (Disabled)
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="color"
+                      value={customColors.liburSemester}
+                      onChange={(e) =>
+                        handleColorChange("liburSemester", e.target.value)
+                      }
+                      className="w-12 h-10 border border-gray-300 rounded cursor-pointer"
+                    />
+                    <span className="text-xs text-gray-600">
+                      {customColors.liburSemester}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Tanggal Merah */}
+                <div className="flex flex-col gap-2">
+                  <label className="text-xs font-medium text-gray-700">
+                    Tanggal Merah (Libur)
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="color"
+                      value={customColors.tanggalMerah}
+                      onChange={(e) =>
+                        handleColorChange("tanggalMerah", e.target.value)
+                      }
+                      className="w-12 h-10 border border-gray-300 rounded cursor-pointer"
+                    />
+                    <span className="text-xs text-gray-600">
+                      {customColors.tanggalMerah}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Bukan Jadwal */}
+                {schoolData?.statusGuru !== "Guru Kelas" &&
+                  selectedKelas !== "Semua" && (
+                    <div className="flex flex-col gap-2">
+                      <label className="text-xs font-medium text-gray-700">
+                        Bukan Jadwal Mengajar
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="color"
+                          value={customColors.bukanJadwal}
+                          onChange={(e) =>
+                            handleColorChange("bukanJadwal", e.target.value)
+                          }
+                          className="w-12 h-10 border border-gray-300 rounded cursor-pointer"
+                        />
+                        <span className="text-xs text-gray-600">
+                          {customColors.bukanJadwal}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                {/* Jadwal Mengajar */}
+                <div className="flex flex-col gap-2">
+                  <label className="text-xs font-medium text-gray-700">
+                    {schoolData?.statusGuru === "Guru Kelas" ||
+                    selectedKelas === "Semua"
+                      ? "Hari Normal"
+                      : "Jadwal Mengajar"}
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="color"
+                      value={customColors.jadwalMengajar}
+                      onChange={(e) =>
+                        handleColorChange("jadwalMengajar", e.target.value)
+                      }
+                      className="w-12 h-10 border border-gray-300 rounded cursor-pointer"
+                    />
+                    <span className="text-xs text-gray-600">
+                      {customColors.jadwalMengajar}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Data Edit */}
+                <div className="flex flex-col gap-2">
+                  <label className="text-xs font-medium text-gray-700">
+                    Data Sedang Diedit
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="color"
+                      value={customColors.dataEdit}
+                      onChange={(e) =>
+                        handleColorChange("dataEdit", e.target.value)
+                      }
+                      className="w-12 h-10 border border-gray-300 rounded cursor-pointer"
+                    />
+                    <span className="text-xs text-gray-600">
+                      {customColors.dataEdit}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Button Reset */}
+              <div className="flex justify-end">
+                <button
+                  onClick={resetColors}
+                  className="text-xs px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-lg font-medium transition-colors"
+                >
+                  🔄 Reset ke Warna Default
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+        {/* ========== AKHIR SECTION PENGATURAN WARNA ========== */}
+
+        {/* Legenda Warna - UPDATE DENGAN WARNA DINAMIS */}
+        <div className="mb-4 bg-gray-50 border border-gray-300 rounded-lg p-4">
+          <h4 className="text-sm font-semibold text-gray-700 mb-3">
+            📌 Keterangan Warna:
+          </h4>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            <div className="flex items-center gap-2">
+              <div
+                className="w-6 h-6 border border-gray-300 rounded"
+                style={{ backgroundColor: customColors.hariMinggu }}
+              ></div>
+              <span className="text-xs text-gray-700">
+                Hari Minggu (Disabled)
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div
+                className="w-6 h-6 border border-gray-300 rounded"
+                style={{ backgroundColor: customColors.liburSemester }}
+              ></div>
+              <span className="text-xs text-gray-700">
+                Libur Semester (Disabled)
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div
+                className="w-6 h-6 border border-gray-300 rounded"
+                style={{ backgroundColor: customColors.tanggalMerah }}
+              ></div>
+              <span className="text-xs text-gray-700">
+                Tanggal Merah (Libur)
+              </span>
+            </div>
+            {schoolData?.statusGuru !== "Guru Kelas" &&
+              selectedKelas !== "Semua" && (
+                <div className="flex items-center gap-2">
+                  <div
+                    className="w-6 h-6 border border-gray-300 rounded"
+                    style={{ backgroundColor: customColors.bukanJadwal }}
+                  ></div>
+                  <span className="text-xs text-gray-700">
+                    Bukan Jadwal Mengajar
+                  </span>
+                </div>
+              )}
+            <div className="flex items-center gap-2">
+              <div
+                className="w-6 h-6 border border-gray-300 rounded"
+                style={{ backgroundColor: customColors.jadwalMengajar }}
+              ></div>
+              <span className="text-xs text-gray-700">
+                {schoolData?.statusGuru === "Guru Kelas" ||
+                selectedKelas === "Semua"
+                  ? "Hari Normal"
+                  : "Jadwal Mengajar"}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div
+                className="w-6 h-6 border border-gray-300 rounded"
+                style={{ backgroundColor: customColors.dataEdit }}
+              ></div>
+              <span className="text-xs text-gray-700">Data Sedang Diedit</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="overflow-auto relative" style={{ maxHeight: "70vh" }}>
+          <style>
+            {`
+              .attendance-table thead tr:first-child th {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    background: #f3f4f6 !important;
+  }
+  
+  .attendance-table thead tr:last-child th {
+    position: sticky;
+    top: 33px;
+    z-index: 30;
+    background: #f3f4f6 !important;
+  
+  .attendance-table th.freeze-no,
+  .attendance-table td.freeze-no {
+    position: sticky;
+    left: 0;
+    z-index: 25;
+    background: #f3f4f6 !important;
+    box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+  }
+  
+  .attendance-table td.freeze-no {
+    background: white !important;
+  }
+  
+  .attendance-table tbody tr:nth-child(even) td.freeze-no {
+    background: #f9fafb !important;
+  }
+  
+  .attendance-table th.freeze-nama,
+  .attendance-table td.freeze-nama {
+    position: sticky;
+    left: 30px;
+    z-index: 25;
+    background: #f3f4f6 !important;
+    box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+    cursor: pointer;
+    min-width: 100px;
+  }
+  
+  .attendance-table td.freeze-nama {
+    background: white !important;
+  }
+  
+  .attendance-table td.freeze-nama:hover {
+    background: #dbeafe !important;
+  }
+  
+  .attendance-table tbody tr:nth-child(even) td.freeze-nama {
+    background: #f9fafb !important;
+  }
+  
+  .attendance-table tbody tr:nth-child(even) td.freeze-nama:hover {
+    background: #dbeafe !important;
+  }
+
+  .attendance-table th.freeze-jk,
+  .attendance-table td.freeze-jk {
+    position: sticky;
+    left: 130px; /* Sesuaikan dengan lebar kolom No + Nama */
+    z-index: 25;
+    background: #f3f4f6 !important;
+    box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+    min-width: 40px;
+    max-width: 40px;
+  }
+  
+  .attendance-table td.freeze-jk {
+    background: white !important;
+  }
+  
+  .attendance-table tbody tr:nth-child(even) td.freeze-jk {
+    background: #f9fafb !important;
+  }
+  
+  .attendance-table thead tr:first-child th.freeze-no,
+  .attendance-table thead tr:last-child th.freeze-no {
+    z-index: 40;
+    background: #f3f4f6 !important;
+  }
+  
+  .attendance-table thead tr:first-child th.freeze-nama,
+  .attendance-table thead tr:last-child th.freeze-nama {
+    z-index: 40;
+    background: #f3f4f6 !important;
+  }
+
+  .attendance-table thead tr:first-child th.freeze-jk,
+  .attendance-table thead tr:last-child th.freeze-jk {
+    z-index: 40;
+    background: #f3f4f6 !important;
+  }
+  .attendance-table tfoot td.freeze-no {
+    position: sticky;
+    left: 0;
+    z-index: 25;
+    box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+  }
+  .attendance-table tfoot td.freeze-jk {
+    position: sticky;
+    left: 130px;
+    z-index: 25;
+    box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+  }
+`}
+          </style>
+
+          <table className="attendance-table min-w-full border-collapse border border-gray-200">
+            <thead>
+              <tr className="bg-gray-100">
+                <th className="freeze-no border px-2 py-1 text-sm">No</th>
+                <th className="freeze-nama border px-2 py-1 text-sm">NAMA</th>
+                <th className="freeze-jk border px-2 py-1 text-sm text-center">
+                  L/P
+                </th>
+                {Array.from({ length: daysInMonth }, (_, i) => {
+                  const dayNum = i + 1;
+                  const hasData = !daysWithNoData.has(dayNum);
+                  const isTglMerah = isTanggalMerah(dayNum);
+                  const deskripsi = getTanggalMerahDeskripsi(dayNum);
+                  const isSundayDay = isSunday(dayNum);
+                  const isLiburSem = isLiburSemester(dayNum);
+                  const isBukanJadwal = isBukanJadwalMengajar(dayNum); // TAMBAHKAN
+
+                  return (
+                    <th
+                      key={i}
+                      className={`border px-1 py-1 text-sm ${
+                        isSundayDay
+                          ? "text-black font-bold"
+                          : isLiburSem
+                          ? "text-black font-bold"
+                          : isTglMerah
+                          ? "text-black font-bold"
+                          : isBukanJadwal
+                          ? "text-black font-bold"
+                          : ""
+                      }`}
+                      style={{
+                        backgroundColor: isSundayDay
+                          ? customColors.hariMinggu
+                          : isLiburSem
+                          ? customColors.liburSemester
+                          : isTglMerah
+                          ? customColors.tanggalMerah
+                          : isBukanJadwal
+                          ? customColors.bukanJadwal
+                          : customColors.jadwalMengajar,
+                      }}
+                      title={
+                        isSundayDay
+                          ? "Hari Minggu"
+                          : isLiburSem
+                          ? deskripsi
+                          : isTglMerah
+                          ? deskripsi
+                          : isBukanJadwal // TAMBAHKAN
+                          ? "Bukan Jadwal Mengajar"
+                          : ""
+                      }
+                    >
+                      {String(dayNum).padStart(2, "0")}
+                    </th>
+                  );
+                })}
+                <th className="border px-2 py-1 text-sm" colSpan={4}>
+                  JUMLAH
+                </th>
+              </tr>
+              <tr className="bg-gray-100">
+                <th className="freeze-no border px-2 py-1 text-sm"></th>
+                <th className="freeze-nama border px-2 py-1 text-sm"></th>
+                <th className="freeze-jk border px-2 py-1 text-sm"></th>
+                {Array.from({ length: daysInMonth }, (_, i) => {
+                  const dayNum = i + 1;
+                  const isTglMerah = isTanggalMerah(dayNum);
+                  const isSundayDay = isSunday(dayNum);
+                  const isLiburSem = isLiburSemester(dayNum);
+                  const isBukanJadwal = isBukanJadwalMengajar(dayNum); // TAMBAHKAN
+
+                  return (
+                    <th
+                      key={i}
+                      className={`border px-1 py-1 text-sm ${
+                        isSundayDay
+                          ? "text-black font-bold"
+                          : isLiburSem
+                          ? "text-black font-bold"
+                          : isTglMerah
+                          ? "text-black font-bold"
+                          : isBukanJadwal
+                          ? "text-black font-bold"
+                          : ""
+                      }`}
+                      style={{
+                        backgroundColor: isSundayDay
+                          ? customColors.hariMinggu
+                          : isLiburSem
+                          ? customColors.liburSemester
+                          : isTglMerah
+                          ? customColors.tanggalMerah
+                          : isBukanJadwal
+                          ? customColors.bukanJadwal
+                          : customColors.jadwalMengajar,
+                      }}
+                    ></th>
+                  );
+                })}
+                <th className="border px-2 py-1 text-sm">H</th>
+                <th className="border px-2 py-1 text-sm">S</th>
+                <th className="border px-2 py-1 text-sm">I</th>
+                <th className="border px-2 py-1 text-sm">A</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredStudents.map((student, index) => {
+                const cached = studentAttendanceMap.get(student.id);
+                if (!cached) return null;
+
+                const { attendance, counts } = cached;
+
+                return (
+                  <tr
+                    key={student.id}
+                    className={index % 2 === 0 ? "bg-white" : "bg-gray-50"}
+                  >
+                    <td className="freeze-no border px-2 py-1 text-xs text-center">
+                      {index + 1}
+                    </td>
+                    <td
+                      className="freeze-nama border px-2 py-1 text-xs"
+                      onClick={() => handleNameClick(student)}
+                      title="Klik untuk melihat detail"
+                    >
+                      {student.name || "N/A"}
+                    </td>
+                    <td className="freeze-jk border px-2 py-1 text-xs text-center font-semibold">
+                      {student.jenisKelamin === "L" ||
+                      student.jenisKelamin === "LAKI-LAKI"
+                        ? "L"
+                        : student.jenisKelamin === "P" ||
+                          student.jenisKelamin === "PEREMPUAN"
+                        ? "P"
+                        : "-"}
+                    </td>
+                    {Array.from({ length: daysInMonth }, (_, day) => {
+                      const currentValue = attendance[day + 1] || "";
+                      const key = `${student.id}_${day + 1}`;
+                      const isEdited = editedRecords[key] !== undefined;
+                      const dayNum = day + 1;
+
+                      const hasDataOnThisDate = !daysWithNoData.has(dayNum);
+                      const isTglMerah = isTanggalMerah(dayNum);
+                      const isSundayDay = isSunday(dayNum);
+                      const isLiburSem = isLiburSemester(dayNum);
+                      const isBukanJadwal = isBukanJadwalMengajar(dayNum); // TAMBAHKAN
+
+                      const getFullStatus = (
+                        code: string
+                      ): AttendanceStatus | "" => {
+                        switch (code) {
+                          case "H":
+                            return "Hadir";
+                          case "I":
+                            return "Izin";
+                          case "S":
+                            return "Sakit";
+                          case "A":
+                            return "Alpha";
+                          default:
+                            return "";
+                        }
+                      };
+
+                      const getColorClass = (code: string) => {
+                        switch (code) {
+                          case "H":
+                            return "text-green-600 hover:bg-green-50";
+                          case "I":
+                            return "text-yellow-600 hover:bg-yellow-50";
+                          case "S":
+                            return "text-blue-600 hover:bg-blue-50";
+                          case "A":
+                            return "text-red-600 hover:bg-red-50";
+                          default:
+                            return "text-gray-400 hover:bg-gray-50";
+                        }
+                      };
+
+                      return (
+                        <td
+                          key={day}
+                          className={`border px-1 py-1 text-sm ${
+                            isSundayDay
+                              ? "text-black font-bold"
+                              : isLiburSem
+                              ? "text-black font-bold"
+                              : isTglMerah
+                              ? "text-black font-bold"
+                              : isBukanJadwal
+                              ? "text-black font-bold"
+                              : ""
+                          }`}
+                          style={{
+                            backgroundColor: isSundayDay
+                              ? customColors.hariMinggu
+                              : isLiburSem
+                              ? customColors.liburSemester
+                              : isTglMerah
+                              ? customColors.tanggalMerah
+                              : isBukanJadwal
+                              ? customColors.bukanJadwal
+                              : customColors.jadwalMengajar,
+                          }}
+                        >
+                          <select
+                            value={
+                              editedRecords[key]?.status ||
+                              getFullStatus(currentValue)
+                            }
+                            onChange={(e) => {
+                              const newStatus = e.target.value as
+                                | AttendanceStatus
+                                | "";
+                              handleStatusChange(student, day + 1, newStatus);
+                            }}
+                            className={`w-full text-center text-xs font-bold cursor-pointer appearance-none bg-transparent border-none focus:outline-none focus:ring-2 focus:ring-blue-400 rounded px-1 py-0.5 transition-colors ${getColorClass(
+                              editedRecords[key]?.status
+                                ? editedRecords[key].status === "Hadir"
+                                  ? "H"
+                                  : editedRecords[key].status === "Izin"
+                                  ? "I"
+                                  : editedRecords[key].status === "Sakit"
+                                  ? "S"
+                                  : editedRecords[key].status === "Alpha"
+                                  ? "A"
+                                  : ""
+                                : currentValue
+                            )}`}
+                            disabled={
+                              isSaving ||
+                              isSundayDay ||
+                              isTglMerah ||
+                              isLiburSemester(day + 1) ||
+                              !isJadwalMengajar(day + 1) // TAMBAHKAN - disable jika bukan jadwal
+                            }
+                            style={{
+                              textAlign: "center",
+                              textAlignLast: "center",
+                              WebkitAppearance: "none",
+                              MozAppearance: "none",
+                            }}
+                          >
+                            <option value="">-</option>
+                            <option value="Hadir" style={{ color: "#059669" }}>
+                              H
+                            </option>
+                            <option value="Izin" style={{ color: "#D97706" }}>
+                              I
+                            </option>
+                            <option value="Sakit" style={{ color: "#2563EB" }}>
+                              S
+                            </option>
+                            <option value="Alpha" style={{ color: "#DC2626" }}>
+                              A
+                            </option>
+                          </select>
+                        </td>
+                      );
+                    })}
+                    <td className="border px-2 py-1 text-center text-xs">
+                      {counts.H}
+                    </td>
+                    <td className="border px-2 py-1 text-center text-xs">
+                      {counts.S}
+                    </td>
+                    <td className="border px-2 py-1 text-center text-xs">
+                      {counts.I}
+                    </td>
+                    <td className="border px-2 py-1 text-center text-xs">
+                      {counts.A}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+            <tfoot>
+              {/* Baris Jumlah Hadir per Tanggal */}
+              <tr className="bg-blue-50 font-semibold">
+                <td
+                  className="freeze-no border px-2 py-1 text-xs text-center"
+                  colSpan={3}
+                >
+                  Jumlah Hadir
+                </td>
+                {Array.from({ length: daysInMonth }, (_, day) => {
+                  const dayNum = day + 1;
+                  const stats = getAttendanceByDate()[dayNum] || {
+                    hadir: 0,
+                    total: 0,
+                  };
+                  const isTglMerah = isTanggalMerah(dayNum);
+                  const isSundayDay = isSunday(dayNum);
+                  const isLiburSem = isLiburSemester(dayNum); // TAMBAHAN BARU
+                  const isBukanJadwal = isBukanJadwalMengajar(dayNum);
+
+                  return (
+                    <td
+                      key={day}
+                      className={`border px-1 py-1 text-sm ${
+                        isSundayDay
+                          ? "text-black font-bold"
+                          : isLiburSem
+                          ? "text-black font-bold"
+                          : isTglMerah
+                          ? "text-black font-bold"
+                          : isBukanJadwal
+                          ? "text-black font-bold"
+                          : ""
+                      }`}
+                      style={{
+                        backgroundColor: isSundayDay
+                          ? customColors.hariMinggu
+                          : isLiburSem
+                          ? customColors.liburSemester
+                          : isTglMerah
+                          ? customColors.tanggalMerah
+                          : isBukanJadwal
+                          ? customColors.bukanJadwal
+                          : customColors.jadwalMengajar,
+                      }}
+                    >
+                      {stats.total > 0 ? stats.hadir : ""}
+                    </td>
+                  );
+                })}
+                <td
+                  className="border px-2 py-1 text-xs text-center"
+                  colSpan={4}
+                >
+                  -
+                </td>
+              </tr>
+
+              {/* Baris Persen Hadir per Tanggal */}
+              <tr className="bg-green-50 font-semibold">
+                <td
+                  className="freeze-no border px-2 py-1 text-xs text-center"
+                  colSpan={3}
+                >
+                  % Hadir
+                </td>
+                {Array.from({ length: daysInMonth }, (_, day) => {
+                  const dayNum = day + 1;
+                  const stats = getAttendanceByDate()[dayNum] || {
+                    hadir: 0,
+                    total: 0,
+                  };
+                  const percentage =
+                    stats.total > 0
+                      ? ((stats.hadir / stats.total) * 100).toFixed(0) + "%"
+                      : "";
+                  const isTglMerah = isTanggalMerah(dayNum);
+                  const isSundayDay = isSunday(dayNum);
+                  const isLiburSem = isLiburSemester(dayNum); // TAMBAHAN BARU
+                  const isBukanJadwal = isBukanJadwalMengajar(dayNum);
+
+                  return (
+                    <td
+                      key={day}
+                      className={`border px-1 py-1 text-sm ${
+                        isSundayDay
+                          ? "text-black font-bold"
+                          : isLiburSem
+                          ? "text-black font-bold"
+                          : isTglMerah
+                          ? "text-black font-bold"
+                          : isBukanJadwal
+                          ? "text-black font-bold"
+                          : ""
+                      }`}
+                      style={{
+                        backgroundColor: isSundayDay
+                          ? customColors.hariMinggu
+                          : isLiburSem
+                          ? customColors.liburSemester
+                          : isTglMerah
+                          ? customColors.tanggalMerah
+                          : isBukanJadwal
+                          ? customColors.bukanJadwal
+                          : customColors.jadwalMengajar,
+                      }}
+                    >
+                      {percentage}
+                    </td>
+                  );
+                })}
+                <td
+                  className="border px-2 py-1 text-xs text-center"
+                  colSpan={4}
+                >
+                  -
+                </td>
+              </tr>
+
+              {/* BARIS BARU: Total Keseluruhan - UBAH BAGIAN INI */}
+              <tr className="bg-yellow-50 font-bold">
+                <td
+                  className="freeze-no border px-2 py-1 text-xs text-center"
+                  colSpan={3 + daysInMonth} // ← UBAH: Gabungkan kolom dari No sampai tanggal terakhir
+                >
+                  TOTAL
+                </td>
+                <td className="border px-2 py-1 text-xs text-center text-green-700">
+                  {getTotalSummary().totalH}
+                </td>
+                <td className="border px-2 py-1 text-xs text-center text-blue-700">
+                  {getTotalSummary().totalS}
+                </td>
+                <td className="border px-2 py-1 text-xs text-center text-yellow-700">
+                  {getTotalSummary().totalI}
+                </td>
+                <td className="border px-2 py-1 text-xs text-center text-red-700">
+                  {getTotalSummary().totalA}
+                </td>
+              </tr>
+
+              {/* BARIS BARU: Persentase Keseluruhan - UBAH BAGIAN INI */}
+              <tr className="bg-orange-50 font-bold">
+                <td
+                  className="freeze-no border px-2 py-1 text-xs text-center"
+                  colSpan={3 + daysInMonth} // ← UBAH: Gabungkan kolom dari No sampai tanggal terakhir
+                >
+                  PERSENTASE BULANAN
+                </td>
+                <td className="border px-2 py-1 text-xs text-center text-green-700">
+                  {getTotalSummary().percentH}%
+                </td>
+                <td className="border px-2 py-1 text-xs text-center text-blue-700">
+                  {getTotalSummary().percentS}%
+                </td>
+                <td className="border px-2 py-1 text-xs text-center text-yellow-700">
+                  {getTotalSummary().percentI}%
+                </td>
+                <td className="border px-2 py-1 text-xs text-center text-red-700">
+                  {getTotalSummary().percentA}%
+                </td>
+              </tr>
+
+              {/* BARIS BARU: Hari Efektif */}
+              <tr className="bg-purple-50 font-bold">
+                <td
+                  className="freeze-no border px-2 py-1 text-xs text-center"
+                  colSpan={3 + daysInMonth}
+                >
+                  HARI EFEKTIF
+                </td>
+                <td
+                  className="border px-2 py-1 text-xs text-center text-purple-700"
+                  colSpan={4}
+                >
+                  {getHariEfektif()} Hari
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+
+          {/* TABEL BARU: Informasi Siswa */}
+          <div className="mt-6">
+            <table className="min-w-full border-collapse border border-gray-200">
+              <thead>
+                <tr className="bg-purple-100">
+                  <th
+                    className="border px-4 py-2 text-sm font-bold"
+                    colSpan={3}
+                  >
+                    📊 Informasi Jumlah Siswa
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr className="bg-purple-50">
+                  <td className="border px-4 py-2 text-sm font-semibold text-center">
+                    Laki-laki
+                  </td>
+                  <td className="border px-4 py-2 text-sm font-semibold text-center">
+                    Perempuan
+                  </td>
+                  <td className="border px-4 py-2 text-sm font-semibold text-center">
+                    Total Siswa
+                  </td>
+                </tr>
+                <tr className="bg-white">
+                  <td className="border px-4 py-2 text-center text-lg font-bold text-blue-700">
+                    {getGenderSummary().lakiLaki}
+                  </td>
+                  <td className="border px-4 py-2 text-center text-lg font-bold text-pink-700">
+                    {getGenderSummary().perempuan}
+                  </td>
+                  <td className="border px-4 py-2 text-center text-lg font-bold text-purple-700">
+                    {getGenderSummary().total}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          {/* TABEL KETERANGAN TANGGAL MERAH */}
+          {filteredTanggalMerah.length > 0 && (
+            <div className="mt-6">
+              <table className="min-w-full border-collapse border border-gray-200">
+                <thead>
+                  <tr className="bg-red-100">
+                    <th
+                      className="border px-4 py-2 text-sm font-bold"
+                      colSpan={2}
+                    >
+                      📅 Keterangan Tanggal Merah / Libur
+                    </th>
+                  </tr>
+                  <tr className="bg-red-50">
+                    <td className="border px-4 py-2 text-sm font-semibold text-center">
+                      Tanggal
+                    </td>
+                    <td className="border px-4 py-2 text-sm font-semibold text-center">
+                      Keterangan
+                    </td>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredTanggalMerah
+                    .sort((a, b) => {
+                      // Sort by date
+                      const [dayA, monthA, yearA] = a.tanggal
+                        .split("/")
+                        .map(Number);
+                      const [dayB, monthB, yearB] = b.tanggal
+                        .split("/")
+                        .map(Number);
+                      return (
+                        new Date(yearA, monthA - 1, dayA).getTime() -
+                        new Date(yearB, monthB - 1, dayB).getTime()
+                      );
+                    })
+                    .map((tm, index) => {
+                      // TAMBAHKAN: Helper function untuk format rentang tanggal
+                      const formatDateRange = (
+                        startDate: string,
+                        endDate?: string
+                      ) => {
+                        if (!endDate) return startDate;
+
+                        const [dayStart, monthStart, yearStart] =
+                          startDate.split("/");
+                        const [dayEnd, monthEnd, yearEnd] = endDate.split("/");
+
+                        // Jika bulan dan tahun sama
+                        if (monthStart === monthEnd && yearStart === yearEnd) {
+                          return `${dayStart} - ${dayEnd}/${monthStart}/${yearStart}`;
+                        }
+                        // Jika tahun sama tapi bulan beda
+                        else if (yearStart === yearEnd) {
+                          return `${dayStart}/${monthStart} - ${dayEnd}/${monthEnd}/${yearEnd}`;
+                        }
+                        // Jika tahun berbeda
+                        else {
+                          return `${startDate} - ${endDate}`;
+                        }
+                      };
+
+                      return (
+                        <tr
+                          key={index}
+                          className={index % 2 === 0 ? "bg-white" : "bg-red-50"}
+                        >
+                          <td className="border px-4 py-2 text-center text-sm">
+                            {(() => {
+                              // Helper untuk menampilkan tanggal yang relevan dengan bulan dipilih
+                              if (!tm.tanggalAkhir) return tm.tanggal;
+
+                              const [dayStart, monthStart, yearStart] =
+                                tm.tanggal.split("/").map(Number);
+                              const [dayEnd, monthEnd, yearEnd] =
+                                tm.tanggalAkhir.split("/").map(Number);
+
+                              // Jika rentang dalam bulan yang sama
+                              if (
+                                monthStart === selectedMonth &&
+                                monthEnd === selectedMonth &&
+                                yearStart === selectedYear &&
+                                yearEnd === selectedYear
+                              ) {
+                                return formatDateRange(
+                                  tm.tanggal,
+                                  tm.tanggalAkhir
+                                );
+                              }
+
+                              // Jika rentang melewati beberapa bulan
+                              // Di bulan pertama: tampilkan "DD/MM/YYYY - Akhir Bulan"
+                              if (
+                                monthStart === selectedMonth &&
+                                yearStart === selectedYear
+                              ) {
+                                const lastDay = new Date(
+                                  selectedYear,
+                                  selectedMonth,
+                                  0
+                                ).getDate();
+                                return `${tm.tanggal} - ${String(
+                                  lastDay
+                                ).padStart(2, "0")}/${String(
+                                  selectedMonth
+                                ).padStart(2, "0")}/${selectedYear}`;
+                              }
+
+                              // Di bulan terakhir: tampilkan "Awal Bulan - DD/MM/YYYY"
+                              if (
+                                monthEnd === selectedMonth &&
+                                yearEnd === selectedYear
+                              ) {
+                                return `01/${String(selectedMonth).padStart(
+                                  2,
+                                  "0"
+                                )}/${selectedYear} - ${tm.tanggalAkhir}`;
+                              }
+
+                              // Di bulan tengah: tampilkan "01 - 31 (atau akhir bulan)"
+                              const lastDay = new Date(
+                                selectedYear,
+                                selectedMonth,
+                                0
+                              ).getDate();
+                              return `01/${String(selectedMonth).padStart(
+                                2,
+                                "0"
+                              )}/${selectedYear} - ${String(lastDay).padStart(
+                                2,
+                                "0"
+                              )}/${String(selectedMonth).padStart(
+                                2,
+                                "0"
+                              )}/${selectedYear}`;
+                            })()}
+                          </td>
+                          <td className="border px-4 py-2 text-sm">
+                            {tm.deskripsi}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {Object.keys(editedRecords).length > 0 && (
+            <div className="mt-6 flex justify-center gap-4">
+              <button
+                onClick={handleSaveChanges}
+                disabled={isSaving}
+                className={`px-6 py-2 rounded-lg font-medium text-white ${
+                  isSaving
+                    ? "bg-blue-400 cursor-not-allowed"
+                    : "bg-blue-600 hover:bg-blue-700"
+                }`}
+              >
+                {isSaving
+                  ? "⏳ Menyimpan..."
+                  : `💾 Simpan Perubahan (${
+                      Object.keys(editedRecords).length
+                    })`}
+              </button>
+              <button
+                onClick={() => setEditedRecords({})}
+                disabled={isSaving}
+                className="px-6 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-lg font-medium"
+              >
+                ❌ Batal
+              </button>
+            </div>
+          )}
+          <div className="mt-6 flex justify-center gap-4">
+            <button
+              onClick={downloadPDF}
+              className="px-1 py-0.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
+            >
+              📄 Download PDF
+            </button>
+            <button
+              onClick={handleDeleteAllAttendance}
+              disabled={isDeleting}
+              className={`px-6 py-2 text-white rounded-lg font-medium ${
+                isDeleting
+                  ? "bg-red-400 cursor-not-allowed"
+                  : "bg-red-600 hover:bg-red-700"
+              }`}
+            >
+              {isDeleting ? "Memproses..." : "🗑️ Hapus Semua Data Absensi"}
+            </button>
+          </div>
+        </div>
+      </div>
+      {/* Modal Detail Siswa */}
+      {showModal && selectedStudent && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+          onClick={closeModal}
+        >
+          <div
+            className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-xl font-bold text-gray-800">Detail Siswa</h3>
+              <button
+                onClick={closeModal}
+                className="text-gray-400 hover:text-gray-600 text-2xl font-bold"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="space-y-3 mb-6">
+              <div className="flex border-b pb-2">
+                <span className="font-semibold text-gray-600 w-24">NISN:</span>
+                <span className="text-gray-800">
+                  {selectedStudent.nisn || "N/A"}
+                </span>
+              </div>
+              <div className="flex border-b pb-2">
+                <span className="font-semibold text-gray-600 w-24">Nama:</span>
+                <span className="text-gray-800">
+                  {selectedStudent.name || "N/A"}
+                </span>
+              </div>
+              <div className="flex border-b pb-2">
+                <span className="font-semibold text-gray-600 w-24">Kelas:</span>
+                <span className="text-gray-800">
+                  {selectedStudent.kelas || "N/A"}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  handleDeleteStudentAttendance(selectedStudent);
+                  closeModal();
+                }}
+                disabled={deletingStudentId === selectedStudent.id || isSaving}
+                className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${
+                  deletingStudentId === selectedStudent.id || isSaving
+                    ? "bg-gray-300 text-gray-500 cursor-not-allowed"
+                    : "bg-red-500 hover:bg-red-600 text-white"
+                }`}
+              >
+                {deletingStudentId === selectedStudent.id
+                  ? "⏳ Menghapus..."
+                  : "🗑️ Hapus Riwayat Absensi"}
+              </button>
+              <button
+                onClick={closeModal}
+                className="px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-lg font-medium transition-colors"
+              >
+                Tutup
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const TanggalMerahTab: React.FC<{
+  onRefresh: () => void;
+}> = ({ onRefresh }) => {
+  // TAMBAHKAN DATA LIBUR NASIONAL DI SINI
+  const liburNasionalOptions = [
+    "Tahun Baru Masehi",
+    "Tahun Baru Imlek",
+    "Hari Raya Nyepi",
+    "Wafat Isa Al-Masih",
+    "Hari Buruh Internasional",
+    "Kenaikan Isa Al-Masih",
+    "Hari Raya Waisak",
+    "Hari Lahir Pancasila",
+    "Libur Awal Puasa Ramadhan",
+    "Libur Hari Raya Idul Fitri",
+    "Hari Raya Idul Adha",
+    "Tahun Baru Islam",
+    "Maulid Nabi Muhammad SAW",
+    "Hari Kemerdekaan RI",
+    "Isra Mikraj Nabi Muhammad SAW",
+    "Hari Raya Natal",
+    "Cuti Bersama Lebaran",
+    "Cuti Bersama Tahun Baru",
+    "Cuti Bersama Natal",
+    "Libur Akhir Semester Ganjil",
+    "Libur Akhir Semester Genap",
+  ];
+  const [tanggalMerahList, setTanggalMerahList] = useState<TanggalMerah[]>([]);
+  const [tanggal, setTanggal] = useState("");
+  const [tanggalAkhir, setTanggalAkhir] = useState("");
+  const [deskripsi, setDeskripsi] = useState("");
+  const [loading, setLoading] = useState<boolean>(true);
+  const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [isDeleting, setIsDeleting] = useState<boolean>(false);
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [showDropdown, setShowDropdown] = useState<boolean>(false);
+  const [searchQuery, setSearchQuery] = useState<string>("");
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // TAMBAHKAN: Helper untuk cek apakah perlu rentang tanggal
+  const needsDateRange = React.useMemo(() => {
+    const lowerDesc = deskripsi.toLowerCase();
+    return (
+      lowerDesc.includes("libur akhir semester") ||
+      lowerDesc.includes("libur awal puasa ramadhan") ||
+      lowerDesc.includes("libur hari raya idul fitri")
+    );
+  }, [deskripsi]);
+
+  // Fetch data tanggal merah
+  useEffect(() => {
+    fetchTanggalMerah();
+  }, []);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(event.target as Node)
+      ) {
+        setShowDropdown(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
+  const fetchTanggalMerah = () => {
+    setLoading(true);
+    fetch(`${endpoint}?action=tanggalMerah`)
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+        return res.json();
+      })
+      .then((data) => {
+        if (data.success) {
+          setTanggalMerahList(data.data || []);
+        } else {
+          alert("❌ Gagal memuat data tanggal merah: " + data.message);
+          setTanggalMerahList([]);
+        }
+        setLoading(false);
+      })
+      .catch((error) => {
+        console.error("Error fetch:", error);
+        alert("❌ Gagal memuat data tanggal merah. Cek console untuk detail.");
+        setLoading(false);
+      });
+  };
+
+  const filteredOptions = React.useMemo(() => {
+    if (!searchQuery.trim()) return liburNasionalOptions;
+    return liburNasionalOptions.filter((option) =>
+      option.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  }, [searchQuery, liburNasionalOptions]);
+
+  const handleSelectOption = (option: string) => {
+    setDeskripsi(option);
+    setSearchQuery("");
+    setShowDropdown(false);
+  };
+
+  const handleSubmit = () => {
+    if (!tanggal || !deskripsi) {
+      alert("⚠️ Tanggal dan Deskripsi wajib diisi!");
+      return;
+    }
+
+    // TAMBAHKAN: Validasi untuk libur semester
+    if (needsDateRange && !tanggalAkhir) {
+      alert("⚠️ Tanggal akhir wajib diisi untuk Libur Semester!");
+      return;
+    }
+
+    setIsSaving(true);
+
+    fetch(endpoint, {
+      method: "POST",
+      mode: "no-cors",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: "tanggalMerah",
+        tanggal: formatDateDDMMYYYY(tanggal),
+        tanggalAkhir: tanggalAkhir ? formatDateDDMMYYYY(tanggalAkhir) : "", // TAMBAHKAN
+        deskripsi,
+      }),
+    })
+      .then(() => {
+        alert("✅ Tanggal merah berhasil ditambahkan!");
+        setTanggal("");
+        setTanggalAkhir(""); // TAMBAHKAN
+        setDeskripsi("");
+        fetchTanggalMerah();
+        onRefresh();
+        setIsSaving(false);
+      })
+      .catch(() => {
+        alert("❌ Gagal menambahkan tanggal merah.");
+        setIsSaving(false);
+      });
+  };
+
+  const handleEdit = (index: number) => {
+    const item = tanggalMerahList[index];
+    const [day, month, year] = item.tanggal.split("/");
+    setTanggal(`${year}-${month}-${day}`);
+
+    // TAMBAHKAN: Set tanggal akhir jika ada
+    if (item.tanggalAkhir) {
+      const [dayEnd, monthEnd, yearEnd] = item.tanggalAkhir.split("/");
+      setTanggalAkhir(`${yearEnd}-${monthEnd}-${dayEnd}`);
+    } else {
+      setTanggalAkhir("");
+    }
+
+    setDeskripsi(item.deskripsi);
+    setEditingIndex(index);
+  };
+
+  const handleUpdate = () => {
+    if (!tanggal || !deskripsi || editingIndex === null) {
+      alert("⚠️ Tanggal dan Deskripsi wajib diisi!");
+      return;
+    }
+
+    // TAMBAHKAN: Validasi untuk libur semester
+    if (needsDateRange && !tanggalAkhir) {
+      alert("⚠️ Tanggal akhir wajib diisi untuk Libur Semester!");
+      return;
+    }
+
+    const oldItem = tanggalMerahList[editingIndex];
+    setIsSaving(true);
+
+    fetch(endpoint, {
+      method: "POST",
+      mode: "no-cors",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: "editTanggalMerah",
+        tanggalLama: oldItem.tanggal,
+        tanggalBaru: formatDateDDMMYYYY(tanggal),
+        tanggalAkhir: tanggalAkhir ? formatDateDDMMYYYY(tanggalAkhir) : "", // TAMBAHKAN
+        deskripsi,
+      }),
+    })
+      .then(() => {
+        alert("✅ Tanggal merah berhasil diperbarui!");
+        setTanggal("");
+        setTanggalAkhir(""); // TAMBAHKAN
+        setDeskripsi("");
+        setEditingIndex(null);
+        fetchTanggalMerah();
+        onRefresh();
+        setIsSaving(false);
+      })
+      .catch(() => {
+        alert("❌ Gagal memperbarui tanggal merah.");
+        setIsSaving(false);
+      });
+  };
+
+  const handleDelete = (tanggalToDelete: string) => {
+    if (!confirm(`Yakin ingin menghapus tanggal merah: ${tanggalToDelete}?`)) {
+      return;
+    }
+
+    setIsDeleting(true);
+
+    fetch(endpoint, {
+      method: "POST",
+      mode: "no-cors",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: "deleteTanggalMerah",
+        tanggal: tanggalToDelete,
+      }),
+    })
+      .then(() => {
+        alert("✅ Tanggal merah berhasil dihapus!");
+        fetchTanggalMerah();
+        onRefresh();
+        setIsDeleting(false);
+      })
+      .catch(() => {
+        alert("❌ Gagal menghapus tanggal merah.");
+        setIsDeleting(false);
+      });
+  };
+
+  const handleCancel = () => {
+    setTanggal("");
+    setTanggalAkhir(""); // TAMBAHKAN
+    setDeskripsi("");
+    setEditingIndex(null);
+  };
+
+  if (loading) {
+    return (
+      <div className="text-center py-8">
+        <p className="text-gray-500">Memuat data tanggal merah...</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-4xl mx-auto" style={{ paddingBottom: "70px" }}>
+      <div className="bg-white p-6 rounded-lg shadow-md mb-6">
+        <h2 className="text-xl font-bold mb-4 text-center text-blue-600">
+          {editingIndex !== null
+            ? "Edit Tanggal Merah"
+            : "Tambah Tanggal Merah"}
+        </h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+          <input
+            type="date"
+            value={tanggal}
+            onChange={(e) => setTanggal(e.target.value)}
+            className="w-full border border-gray-300 px-4 py-2 rounded-lg"
+            disabled={isSaving}
+            placeholder="Tanggal Mulai"
+          />
+          {/* TAMBAHKAN: Input tanggal akhir yang muncul conditional */}
+          {needsDateRange && (
+            <input
+              type="date"
+              value={tanggalAkhir}
+              onChange={(e) => setTanggalAkhir(e.target.value)}
+              className="w-full border border-gray-300 px-4 py-2 rounded-lg"
+              disabled={isSaving}
+              placeholder="Tanggal Akhir (untuk Libur Semester)"
+            />
+          )}
+          {/* ⬇️ GANTI DENGAN KODE INI ⬇️ */}
+          <div className="relative" ref={dropdownRef}>
+            <input
+              type="text"
+              placeholder="Deskripsi (cth: Hari Raya Nyepi)"
+              value={deskripsi}
+              onChange={(e) => {
+                setDeskripsi(e.target.value);
+                setSearchQuery(e.target.value);
+                setShowDropdown(true);
+              }}
+              onFocus={() => setShowDropdown(true)}
+              className="w-full border border-gray-300 px-4 py-2 rounded-lg"
+              disabled={isSaving}
+            />
+
+            {showDropdown && filteredOptions.length > 0 && (
+              <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                {filteredOptions.map((option, index) => (
+                  <div
+                    key={index}
+                    onClick={() => handleSelectOption(option)}
+                    className="px-4 py-2 hover:bg-blue-50 cursor-pointer text-sm transition-colors"
+                  >
+                    {option}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {showDropdown && searchQuery && filteredOptions.length === 0 && (
+              <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg p-4 text-center text-gray-500 text-sm">
+                Tidak ada hasil untuk "{searchQuery}"
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* TAMBAHKAN: Info helper untuk libur semester */}
+        {needsDateRange && (
+          <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+            <p className="text-sm text-blue-700">
+              💡{" "}
+              <strong>
+                {deskripsi.toLowerCase().includes("libur akhir semester")
+                  ? "Libur Semester"
+                  : deskripsi
+                      .toLowerCase()
+                      .includes("libur awal puasa ramadhan")
+                  ? "Libur Awal Puasa Ramadhan"
+                  : "Libur Hari Raya Idul Fitri"}
+                :
+              </strong>{" "}
+              Silakan pilih tanggal mulai dan tanggal akhir libur.
+            </p>
+          </div>
+        )}
+        <div className="flex justify-center gap-4">
+          {editingIndex !== null ? (
+            <>
+              <button
+                onClick={handleUpdate}
+                disabled={isSaving}
+                className={`px-6 py-2 rounded-lg font-medium transition-colors ${
+                  isSaving
+                    ? "bg-blue-400 cursor-not-allowed"
+                    : "bg-blue-600 hover:bg-blue-700"
+                } text-white`}
+              >
+                {isSaving ? "⏳ Menyimpan..." : "💾 Update"}
+              </button>
+              <button
+                onClick={handleCancel}
+                disabled={isSaving}
+                className="px-6 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-lg font-medium"
+              >
+                ❌ Batal
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={handleSubmit}
+              disabled={isSaving}
+              className={`px-6 py-2 rounded-lg font-medium transition-colors ${
+                isSaving
+                  ? "bg-blue-400 cursor-not-allowed"
+                  : "bg-blue-600 hover:bg-blue-700"
+              } text-white`}
+            >
+              {isSaving ? "⏳ Menyimpan..." : "➕ Tambah Tanggal Merah"}
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="bg-white p-6 rounded-lg shadow-md">
+        <h3 className="text-lg font-semibold text-gray-700 mb-4">
+          Daftar Tanggal Merah ({tanggalMerahList.length})
+        </h3>
+        {tanggalMerahList.length === 0 ? (
+          <p className="text-center text-gray-500 py-8">
+            Belum ada data tanggal merah.
+          </p>
+        ) : (
+          <div className="space-y-3">
+            {tanggalMerahList.map((item, index) => (
+              <div
+                key={index}
+                className="flex justify-between items-center bg-gray-50 border border-gray-200 px-4 py-3 rounded-lg"
+              >
+                <div>
+                  <p className="font-medium text-gray-800">
+                    {item.tanggalAkhir
+                      ? `${item.tanggal} - ${item.tanggalAkhir}`
+                      : item.tanggal}
+                  </p>
+                  <p className="text-sm text-gray-600">{item.deskripsi}</p>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handleEdit(index)}
+                    disabled={isSaving || isDeleting}
+                    className={`text-xs px-3 py-1 rounded transition-colors ${
+                      isSaving || isDeleting
+                        ? "bg-yellow-400 cursor-not-allowed"
+                        : "bg-yellow-500 hover:bg-yellow-600"
+                    } text-white`}
+                  >
+                    ✏️ Edit
+                  </button>
+                  <button
+                    onClick={() => handleDelete(item.tanggal)}
+                    disabled={isSaving || isDeleting}
+                    className={`text-xs px-3 py-1 rounded transition-colors ${
+                      isSaving || isDeleting
+                        ? "bg-red-400 cursor-not-allowed"
+                        : "bg-red-500 hover:bg-red-600"
+                    } text-white`}
+                  >
+                    🗑️ Hapus
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 };
